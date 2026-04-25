@@ -13,7 +13,12 @@ Describe "Codex Continuum package" {
         $watcher | Should Match "sendkeys-tilde"
         $watcher | Should Match "sendkeys-ctrl-m"
         $watcher | Should Match "SendEnterKey"
+        $watcher | Should Match "SendEscapeKey"
         $watcher | Should Match "-confirmed"
+        $watcher | Should Match "TitleWorkingPattern"
+        $watcher | Should Match "WorkingSignal"
+        $watcher | Should Match "RequireObservedWorkingBeforeFirstPrompt"
+        $watcher | Should Match 'observedWorking = -not'
     }
 
     It "does not keep the old project-specific type name" {

@@ -2,6 +2,13 @@
 
 ## 0.1.0
 
+- Fixed startup idle behavior so attaching after Codex has already finished
+  sends one continuation prompt instead of waiting forever for a new `Working`
+  transition.
+- Clear Windows console selection mode before typing, because a `Select ...`
+  PowerShell title can swallow both text and Enter.
+- Detect active Codex work from the window-title spinner when the bottom
+  `Working` text is not exposed by UI Automation.
 - Added universal `-ProjectName` targeting for live Codex PowerShell windows.
 - Added process-id and window-handle targeting.
 - Added confirmed submit behavior: after typing `continue`, Continuum submits

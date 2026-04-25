@@ -6,12 +6,14 @@ Codex Continuum is a live-window watcher.
 
 1. Resolve a live Codex PowerShell window by project name, PID, handle, or the
    only available candidate.
-2. Read the bottom portion of the target window through Windows UI Automation.
-3. Watch for `Working`.
-4. Wait until `Working` clears and remains clear briefly.
+2. Read the bottom portion of the target window through Windows UI Automation
+   and read the live PowerShell window title.
+3. Watch for bottom `Working` text or the Codex spinner title, or treat the
+   startup state as eligible if the session is already idle.
+4. Wait until idle remains stable briefly.
 5. Bring the same target window foreground.
-6. Type `continue`.
-7. Submit and confirm the status returns to `Working`.
+6. Clear console selection mode with Escape, then type `continue`.
+7. Submit and confirm the status returns to active work by text or title signal.
 8. Write a receipt.
 
 ## Why UI Automation
@@ -32,6 +34,13 @@ SendInput VK_RETURN
 SendKeys "{ENTER}"
 ```
 
-After each submit attempt, it waits for `Working`. Receipts record the method
-that confirmed, or record `unconfirmed` if no method produced a visible status
-transition.
+After each submit attempt, it waits for `Working` text or a Codex spinner title.
+Receipts record the method and signal that confirmed, or record `unconfirmed` if
+no method produced a visible status transition.
+
+## Startup Idle Kick
+
+Continuum defaults to sending once if it attaches to an already-idle session.
+That handles the common case where the watcher starts after Codex has already
+finished. After that first prompt, it goes back to requiring a new `Working` to
+idle transition before sending again.

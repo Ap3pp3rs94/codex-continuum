@@ -7,6 +7,8 @@ param(
     [ValidateNotNullOrEmpty()]
     [string]$StatusPattern = "\bWorking\b",
 
+    [string]$TitleWorkingPattern = "^[\u280b\u2819\u2839\u2838\u283c\u2834\u2826\u2827\u2807\u280f]\s+",
+
     [ValidateRange(100, 10000)]
     [int]$PollMilliseconds = 750,
 
@@ -47,6 +49,8 @@ param(
     [string]$ReceiptPath = "",
 
     [switch]$AllowFullWindowFallback,
+
+    [switch]$RequireObservedWorkingBeforeFirstPrompt,
 
     [switch]$ProbeOnly,
 
@@ -103,6 +107,7 @@ public static class CodexContinuumWindow
     private const int INPUT_KEYBOARD = 1;
     private const uint KEYEVENTF_KEYUP = 0x0002;
     private const uint KEYEVENTF_UNICODE = 0x0004;
+    private const ushort VK_ESCAPE = 0x1B;
     private const ushort VK_RETURN = 0x0D;
 
     [StructLayout(LayoutKind.Sequential)]
@@ -190,6 +195,11 @@ public static class CodexContinuumWindow
     public static void SendEnterKey()
     {
         SendVirtualKey(VK_RETURN);
+    }
+
+    public static void SendEscapeKey()
+    {
+        SendVirtualKey(VK_ESCAPE);
     }
 }
 "@
@@ -390,6 +400,36 @@ function Get-LiveSessionStatusText {
     }
 }
 
+function Get-LiveSessionWorkingState {
+    param(
+        [Parameter(Mandatory = $true)]
+        [IntPtr]$Handle
+    )
+
+    $status = Get-LiveSessionStatusText -Handle $Handle
+    $title = [CodexContinuumWindow]::GetTitle($Handle)
+    $workingByText = ([string]$status.Text) -match $StatusPattern
+    $workingByTitle = (-not [string]::IsNullOrWhiteSpace($TitleWorkingPattern)) -and ($title -match $TitleWorkingPattern)
+    $signal = if ($workingByText) {
+        "text"
+    }
+    elseif ($workingByTitle) {
+        "title"
+    }
+    else {
+        "none"
+    }
+
+    return [pscustomobject]@{
+        Text = [string]$status.Text
+        Title = $title
+        Working = [bool]($workingByText -or $workingByTitle)
+        WorkingSignal = $signal
+        IncludedCount = [int]$status.IncludedCount
+        UsedFallback = [bool]$status.UsedFallback
+    }
+}
+
 function Send-ContinuePrompt {
     param(
         [Parameter(Mandatory = $true)]
@@ -400,6 +440,15 @@ function Send-ContinuePrompt {
     Start-Sleep -Milliseconds 150
     if ([CodexContinuumWindow]::GetForegroundWindow() -ne $Handle) {
         throw "target_window_not_foreground"
+    }
+
+    try {
+        [CodexContinuumWindow]::SendEscapeKey()
+        Start-Sleep -Milliseconds 150
+    }
+    catch {
+        [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
+        Start-Sleep -Milliseconds 150
     }
 
     $textMethod = ""
@@ -446,9 +495,9 @@ function Send-ContinuePrompt {
         $deadline = (Get-Date).AddMilliseconds($SubmitConfirmMilliseconds)
         while ((Get-Date) -lt $deadline) {
             Start-Sleep -Milliseconds 250
-            $status = Get-LiveSessionStatusText -Handle $Handle
-            if (([string]$status.Text) -match $StatusPattern) {
-                return "$textMethod+$submitMethod-confirmed"
+            $state = Get-LiveSessionWorkingState -Handle $Handle
+            if ($state.Working) {
+                return "$textMethod+$submitMethod-confirmed-$($state.WorkingSignal)"
             }
         }
     }
@@ -496,7 +545,7 @@ if ($WindowTitlePattern -and $windowTitle -notmatch $WindowTitlePattern) {
 
 $handleId = ("0x{0:x}" -f $sessionHandle.ToInt64())
 Write-Host "Attached to live window $handleId ($windowTitle)"
-Write-Host "Watching for status pattern '$StatusPattern' in the bottom $([Math]::Round($BottomFraction * 100))% of that same foreground window."
+Write-Host "Watching for status pattern '$StatusPattern' or title pattern '$TitleWorkingPattern' in that same live window."
 Write-Host "Receipts: $receiptPath"
 
 Write-Receipt -Event "codex_live_continue.attached" -Data @{
@@ -512,10 +561,13 @@ Write-Receipt -Event "codex_live_continue.attached" -Data @{
     target_window_handle = $TargetWindowHandle
     bottom_fraction = $BottomFraction
     tail_lines = $TailLines
+    status_pattern = $StatusPattern
+    title_working_pattern = $TitleWorkingPattern
     timeout_s = $TimeoutSeconds
     window_title_pattern = $WindowTitlePattern
     session_id = $SessionId
     allow_full_window_fallback = [bool]$AllowFullWindowFallback
+    require_observed_working_before_first_prompt = [bool]$RequireObservedWorkingBeforeFirstPrompt
     probe_only = [bool]$ProbeOnly
     exit_on_focus_loss = [bool]$ExitOnFocusLoss
     pause_when_target_not_foreground = [bool]$PauseWhenTargetNotForeground
@@ -523,18 +575,20 @@ Write-Receipt -Event "codex_live_continue.attached" -Data @{
 }
 
 if ($ProbeOnly) {
-    $status = Get-LiveSessionStatusText -Handle $sessionHandle
-    $isWorking = ([string]$status.Text) -match $StatusPattern
+    $status = Get-LiveSessionWorkingState -Handle $sessionHandle
+    $isWorking = [bool]$status.Working
     Write-Receipt -Event "codex_live_continue.probe" -Data @{
         handle = $handleId
         working = [bool]$isWorking
+        working_signal = [string]$status.WorkingSignal
+        title = [string]$status.Title
         included_accessible_elements = [int]$status.IncludedCount
         used_full_window_fallback = [bool]$status.UsedFallback
         text_available = -not [string]::IsNullOrWhiteSpace([string]$status.Text)
         session_id = $SessionId
     }
 
-    Write-Host "Probe result: working=$isWorking, accessible_elements=$($status.IncludedCount), fallback=$($status.UsedFallback)"
+    Write-Host "Probe result: working=$isWorking, signal=$($status.WorkingSignal), title='$($status.Title)', accessible_elements=$($status.IncludedCount), fallback=$($status.UsedFallback)"
     if ($VerboseStatusText) {
         Write-Host "--- captured status text ---"
         Write-Host ([string]$status.Text)
@@ -547,7 +601,7 @@ if ($ProbeOnly) {
 }
 
 $startedAt = Get-Date
-$observedWorking = $false
+$observedWorking = -not [bool]$RequireObservedWorkingBeforeFirstPrompt
 $clearSince = $null
 $lastPromptAt = (Get-Date).AddSeconds(-1 * ($CooldownSeconds + 1))
 $sentPrompts = 0
@@ -617,14 +671,16 @@ while ($MaxPrompts -eq 0 -or $sentPrompts -lt $MaxPrompts) {
         Write-Host "Resumed watching the attached live session."
     }
 
-    $status = Get-LiveSessionStatusText -Handle $sessionHandle
-    $isWorking = ([string]$status.Text) -match $StatusPattern
+    $status = Get-LiveSessionWorkingState -Handle $sessionHandle
+    $isWorking = [bool]$status.Working
 
     if ($lastObservedState -ne $isWorking) {
         $lastObservedState = $isWorking
         Write-Receipt -Event "codex_live_continue.status" -Data @{
             handle = $handleId
             working = [bool]$isWorking
+            working_signal = [string]$status.WorkingSignal
+            title = [string]$status.Title
             included_accessible_elements = [int]$status.IncludedCount
             used_full_window_fallback = [bool]$status.UsedFallback
             session_id = $SessionId

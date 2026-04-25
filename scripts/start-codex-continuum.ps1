@@ -20,6 +20,8 @@ param(
     [ValidateNotNullOrEmpty()]
     [string]$StatusPattern = "\bWorking\b",
 
+    [string]$TitleWorkingPattern = "^[\u280b\u2819\u2839\u2838\u283c\u2834\u2826\u2827\u2807\u280f]\s+",
+
     [ValidateRange(100, 10000)]
     [int]$PollMilliseconds = 750,
 
@@ -48,6 +50,8 @@ param(
     [switch]$ListCandidates,
 
     [switch]$AllowFullWindowFallback,
+
+    [switch]$RequireObservedWorkingBeforeFirstPrompt,
 
     [switch]$VerboseStatusText,
 
@@ -213,6 +217,7 @@ if ($TargetProcessId -eq 0 -and $TargetWindowHandle -eq 0) {
 $watcherParameters = @{
     Prompt = $Prompt
     StatusPattern = $StatusPattern
+    TitleWorkingPattern = $TitleWorkingPattern
     PollMilliseconds = $PollMilliseconds
     StableClearMilliseconds = $StableClearMilliseconds
     SubmitConfirmMilliseconds = $SubmitConfirmMilliseconds
@@ -248,6 +253,10 @@ if ($ProbeOnly) {
 
 if ($AllowFullWindowFallback) {
     $watcherParameters.AllowFullWindowFallback = $true
+}
+
+if ($RequireObservedWorkingBeforeFirstPrompt) {
+    $watcherParameters.RequireObservedWorkingBeforeFirstPrompt = $true
 }
 
 if ($VerboseStatusText) {

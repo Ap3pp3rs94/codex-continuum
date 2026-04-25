@@ -17,6 +17,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plu
 
 `-MaxPrompts 0` is the default and means unlimited.
 
+By default, Continuum also sends one prompt if the selected live session is
+already idle when the watcher starts. Use `-RequireObservedWorkingBeforeFirstPrompt`
+to wait for a fresh `Working` state before the first continuation.
+
 ## Bounded Run
 
 ```powershell
@@ -25,8 +29,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plu
 
 ## Submit Confirmation
 
-Continuum types `continue`, sends a submit key, then waits for the Codex status
-to become `Working`.
+Continuum types `continue`, sends a submit key, then waits for Codex to become
+active again. It checks both the bottom `Working` status text and the spinner
+prefix that Codex puts in the PowerShell window title.
 
 Default submit confirmation window:
 
@@ -36,3 +41,6 @@ Default submit confirmation window:
 
 If your machine is slow to expose status changes through UI Automation, increase
 that value.
+
+If your terminal title does not use the default Codex spinner prefix, override
+`-TitleWorkingPattern`.

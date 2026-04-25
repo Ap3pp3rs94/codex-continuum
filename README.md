@@ -2,17 +2,22 @@
 
 Universal live-session continuation for Codex on Windows.
 
-Codex Continuum watches one live Codex PowerShell window for `Working`, waits
-for that status to clear, then types `continue` and submits it in the same
-window. It is built for the visible session you are already using, not for
-hidden backend resume or archived transcript replay.
+Codex Continuum watches one live Codex PowerShell window for live work signals:
+the bottom `Working` text when UI Automation can see it, or the Codex spinner in
+the window title when the terminal hides the bottom status. When work clears, it
+types `continue` and submits it in the same window. It is built for the visible
+session you are already using, not for hidden backend resume or archived
+transcript replay.
 
 ## What It Does
 
 - Targets any live Codex project window by `-ProjectName`, process id, or window
   handle.
 - Sends input only to the selected live window.
-- Types `continue`, submits it, and confirms Codex returns to `Working`.
+- Types `continue`, submits it, and confirms Codex returns to active work by
+  bottom status text or title spinner.
+- Sends once on startup idle, so attaching after Codex has already finished
+  still continues the session.
 - Falls back across multiple submit keys if one Enter path types but does not
   submit.
 - Writes JSONL receipts for attach, status, prompt, and stop events.
@@ -45,6 +50,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plu
 ```
 
 Stop it with Ctrl+C in the watcher PowerShell window.
+
+If you do not want the startup idle kick, add
+`-RequireObservedWorkingBeforeFirstPrompt`.
 
 ## Install
 

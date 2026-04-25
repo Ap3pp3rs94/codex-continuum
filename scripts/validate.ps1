@@ -30,7 +30,7 @@ catch {
 }
 
 $watcher = Get-Content -LiteralPath (Join-Path $repoRoot "scripts\codex-live-continue.ps1") -Raw
-foreach ($required in @("SubmitConfirmMilliseconds", "sendkeys-tilde", "sendkeys-ctrl-m", "SendEnterKey", "-confirmed")) {
+foreach ($required in @("SubmitConfirmMilliseconds", "sendkeys-tilde", "sendkeys-ctrl-m", "SendEnterKey", "SendEscapeKey", "-confirmed", "TitleWorkingPattern", "WorkingSignal", "RequireObservedWorkingBeforeFirstPrompt", "observedWorking = -not")) {
     if ($watcher -notmatch [regex]::Escape($required)) {
         Add-Failure "Watcher missing required submit behavior: $required"
     }
