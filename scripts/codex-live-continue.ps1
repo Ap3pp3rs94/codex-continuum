@@ -7,7 +7,7 @@ param(
     [ValidateNotNullOrEmpty()]
     [string]$StatusPattern = "\bWorking\b",
 
-    [string]$TitleWorkingPattern = "^[\u280b\u2819\u2839\u2838\u283c\u2834\u2826\u2827\u2807\u280f]\s+",
+    [string]$TitleWorkingPattern = "(^|:\s*)[\u280b\u2819\u2839\u2838\u283c\u2834\u2826\u2827\u2807\u280f]\s+",
 
     [ValidateRange(100, 10000)]
     [int]$PollMilliseconds = 750,
@@ -841,7 +841,23 @@ while ($MaxPrompts -eq 0 -or $sentPrompts -lt $MaxPrompts) {
             }
 
             $lastPromptAt = Get-Date
-            if ($sent -or $WhatIfPreference) {
+            $confirmedWorkObserved = $sent -and ($inputMethod -match "-confirmed-")
+            if ($confirmedWorkObserved) {
+                $observedWorking = $true
+                $clearSince = $null
+                $lastObservedState = $true
+                $confirmedStatus = Get-LiveSessionWorkingState -Handle $sessionHandle
+                Write-Receipt -Event "codex_live_continue.status" -Data @{
+                    handle = $handleId
+                    working = $true
+                    working_signal = "send_confirmation"
+                    title = [string]$confirmedStatus.Title
+                    included_accessible_elements = [int]$confirmedStatus.IncludedCount
+                    used_full_window_fallback = [bool]$confirmedStatus.UsedFallback
+                    session_id = $SessionId
+                }
+            }
+            elseif ($sent -or $WhatIfPreference) {
                 $observedWorking = $false
                 $clearSince = $null
             }
@@ -860,6 +876,7 @@ while ($MaxPrompts -eq 0 -or $sentPrompts -lt $MaxPrompts) {
                 session_id = $SessionId
                 input_method = $inputMethod
                 error = $sendError
+                confirmed_work_observed = [bool]$confirmedWorkObserved
             }
 
             if ($sent) {

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.2
+
+- Match Codex title spinners after Windows title prefixes such as
+  `Administrator:`.
+- Treat a confirmed submit as an observed work cycle so the watcher catches the
+  next idle completion even when title updates flicker.
+
 ## 0.1.1
 
 - Added reproducible plugin zip packaging.

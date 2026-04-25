@@ -26,6 +26,8 @@ Describe "Codex Continuum package" {
             "ForceForegroundWindow",
             "Set-LiveSessionForeground",
             "prompt_attempts",
+            "confirmed_work_observed",
+            "send_confirmation",
             "RequireObservedWorkingBeforeFirstPrompt",
             'observedWorking = -not'
         )) {
