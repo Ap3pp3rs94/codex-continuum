@@ -1,0 +1,48 @@
+{
+  "name": "codex-continuum",
+  "version": "0.1.0",
+  "description": "Universal Windows live-session continuation package for Codex.",
+  "author": {
+    "name": "Ap3pp",
+    "email": "",
+    "url": ""
+  },
+  "homepage": "",
+  "repository": "",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "continuum",
+    "continuation",
+    "powershell",
+    "windows"
+  ],
+  "skills": "",
+  "hooks": "",
+  "mcpServers": "",
+  "apps": "",
+  "interface": {
+    "displayName": "Codex Continuum",
+    "shortDescription": "Continue any live Codex PowerShell project window.",
+    "longDescription": "Codex Continuum binds to a live Codex PowerShell window by project name, process id, or window handle. It watches for Working to clear, then types continue and presses Enter in that same live session.",
+    "developerName": "Ap3pp",
+    "category": "Productivity",
+    "capabilities": [
+      "Project-name targeting",
+      "Live Codex continuation",
+      "Local Windows UI automation"
+    ],
+    "websiteURL": "",
+    "privacyPolicyURL": "",
+    "termsOfServiceURL": "",
+    "defaultPrompt": [
+      "Start Continuum for this project.",
+      "List live Codex project windows.",
+      "Probe a Continuum target before running."
+    ],
+    "brandColor": "#0F766E",
+    "composerIcon": "",
+    "logo": "",
+    "screenshots": []
+  }
+}

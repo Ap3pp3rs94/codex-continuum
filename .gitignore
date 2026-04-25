@@ -1,0 +1,15 @@
+# Runtime state
+data/
+*.jsonl
+*.log
+
+# PowerShell/editor noise
+*.ps1xml.tmp
+*.tmp
+.vscode/
+.idea/
+
+# Test/cache output
+TestResults/
+coverage/
+.cache/
