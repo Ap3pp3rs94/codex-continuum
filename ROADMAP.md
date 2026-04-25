@@ -1,0 +1,26 @@
+# Roadmap
+
+## 0.1
+
+- Live Codex PowerShell targeting by project name, PID, or window handle.
+- Confirmed submit after typing `continue`.
+- JSONL receipts.
+- Local install and validation scripts.
+
+## 0.2
+
+- Add a first-class `Start-Continuum` PowerShell module wrapper.
+- Add richer receipt summaries for confirmed vs unconfirmed submit attempts.
+- Add optional Windows Terminal profile/title helpers.
+
+## 0.3
+
+- Add packaged release artifacts.
+- Add signed-script guidance.
+- Add broader terminal-host compatibility notes.
+
+## 1.0
+
+- Stable public CLI surface.
+- Documented support matrix.
+- Reproducible install and validation path from a fresh checkout.
