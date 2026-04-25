@@ -1,27 +1,67 @@
 $repoRoot = Split-Path -Parent $PSScriptRoot
 
+function Assert-Equal {
+    param(
+        [object]$Actual,
+        [object]$Expected,
+        [string]$Message
+    )
+
+    if ($Actual -ne $Expected) {
+        throw "$Message Expected '$Expected', got '$Actual'."
+    }
+}
+
+function Assert-Matches {
+    param(
+        [string]$Text,
+        [string]$Pattern,
+        [string]$Message
+    )
+
+    if ($Text -notmatch $Pattern) {
+        throw "$Message Missing pattern '$Pattern'."
+    }
+}
+
+function Assert-NotMatches {
+    param(
+        [string]$Text,
+        [string]$Pattern,
+        [string]$Message
+    )
+
+    if ($Text -match $Pattern) {
+        throw "$Message Unexpected pattern '$Pattern'."
+    }
+}
+
 Describe "Codex Continuum package" {
     It "has valid plugin metadata" {
         $manifest = Get-Content -LiteralPath (Join-Path $repoRoot ".codex-plugin\plugin.json") -Raw | ConvertFrom-Json
-        $manifest.name | Should Be "codex-continuum"
-        $manifest.license | Should Be "MIT"
+        Assert-Equal -Actual $manifest.name -Expected "codex-continuum" -Message "Plugin name mismatch."
+        Assert-Equal -Actual $manifest.license -Expected "MIT" -Message "Plugin license mismatch."
     }
 
     It "keeps the confirmed submit fallback in the watcher" {
         $watcher = Get-Content -LiteralPath (Join-Path $repoRoot "scripts\codex-live-continue.ps1") -Raw
-        $watcher | Should Match "SubmitConfirmMilliseconds"
-        $watcher | Should Match "sendkeys-tilde"
-        $watcher | Should Match "sendkeys-ctrl-m"
-        $watcher | Should Match "SendEnterKey"
-        $watcher | Should Match "SendEscapeKey"
-        $watcher | Should Match "-confirmed"
-        $watcher | Should Match "TitleWorkingPattern"
-        $watcher | Should Match "WorkingSignal"
-        $watcher | Should Match "ForceForegroundWindow"
-        $watcher | Should Match "Set-LiveSessionForeground"
-        $watcher | Should Match "prompt_attempts"
-        $watcher | Should Match "RequireObservedWorkingBeforeFirstPrompt"
-        $watcher | Should Match 'observedWorking = -not'
+        foreach ($pattern in @(
+            "SubmitConfirmMilliseconds",
+            "sendkeys-tilde",
+            "sendkeys-ctrl-m",
+            "SendEnterKey",
+            "SendEscapeKey",
+            "-confirmed",
+            "TitleWorkingPattern",
+            "WorkingSignal",
+            "ForceForegroundWindow",
+            "Set-LiveSessionForeground",
+            "prompt_attempts",
+            "RequireObservedWorkingBeforeFirstPrompt",
+            'observedWorking = -not'
+        )) {
+            Assert-Matches -Text $watcher -Pattern ([regex]::Escape($pattern)) -Message "Watcher behavior check failed."
+        }
     }
 
     It "does not keep the old project-specific type name" {
@@ -33,6 +73,6 @@ Describe "Codex Continuum package" {
             } |
             ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue }
 
-        ($text -join "`n") | Should Not Match "FrancisLiveWindow"
+        Assert-NotMatches -Text ($text -join "`n") -Pattern "FrancisLiveWindow" -Message "Old project-specific type name found."
     }
 }
