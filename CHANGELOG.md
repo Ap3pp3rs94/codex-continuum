@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0
+
+- Added root entrypoint commands: `start`, `stop`, `status`, and `update`.
+- Added `stop-continuum.ps1` for scoped watcher shutdown with stop-request
+  receipts.
+- Added `update-continuum.ps1` for release-zip updates with SHA256
+  verification.
+
 ## 0.1.3
 
 - Added a read-only `status` command that summarizes watcher health from JSONL

@@ -11,7 +11,7 @@
 
 ## 0.2
 
-- Add a first-class `Start-Continuum` PowerShell module wrapper.
+- Add first-class `start`, `stop`, `status`, and `update` command wrappers.
 - Add richer receipt exports for confirmed vs unconfirmed submit attempts.
 - Add optional Windows Terminal profile/title helpers.
 

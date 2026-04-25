@@ -23,7 +23,7 @@ transcript replay.
 - Retries foreground activation before typing, then keeps watching if Windows
   blocks one focus handoff.
 - Writes JSONL receipts for attach, status, prompt, and stop events.
-- Reports watcher health from receipts with `status`.
+- Provides `start`, `stop`, `status`, and `update` commands from one entrypoint.
 - Runs until Ctrl+C by default.
 
 ## Quick Start
@@ -37,7 +37,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plu
 Start Continuum for any project name shown in the Codex window title:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" -ProjectName "<ProjectName>" -SessionId "<session-id>"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" start -ProjectName "<ProjectName>" -SessionId "<session-id>"
 ```
 
 Start by PID when multiple windows have similar titles:
@@ -63,12 +63,24 @@ Check watcher health:
 powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" status
 ```
 
+Stop running Continuum watchers:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" stop
+```
+
+Update an installed release build:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" update
+```
+
 ## Install
 
 From the latest GitHub release:
 
 ```powershell
-$version = "0.1.3"
+$version = "0.2.0"
 $zip = Join-Path $env:TEMP "codex-continuum-plugin-v$version.zip"
 Invoke-WebRequest -Uri "https://github.com/Ap3pp3rs94/codex-continuum/releases/download/v$version/codex-continuum-plugin-v$version.zip" -OutFile $zip
 Expand-Archive -Path $zip -DestinationPath "$env:USERPROFILE\.codex\plugins" -Force

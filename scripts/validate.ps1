@@ -30,8 +30,10 @@ catch {
 }
 
 $entrypoint = Get-Content -LiteralPath (Join-Path $repoRoot "codex-continuum.ps1") -Raw
-if ($entrypoint -notmatch "get-continuum-status\.ps1") {
-    Add-Failure "Entrypoint does not expose the status command"
+foreach ($required in @("scripts\start-continuum.ps1", "scripts\stop-continuum.ps1", "scripts\get-continuum-status.ps1", "scripts\update-continuum.ps1")) {
+    if ($entrypoint -notmatch [regex]::Escape($required)) {
+        Add-Failure "Entrypoint missing command route: $required"
+    }
 }
 
 $testText = Get-Content -LiteralPath (Join-Path $repoRoot "tests\CodexContinuum.Tests.ps1") -Raw
@@ -66,9 +68,16 @@ else {
     }
 }
 
+foreach ($scriptName in @("start-continuum.ps1", "stop-continuum.ps1", "update-continuum.ps1")) {
+    if (-not (Test-Path -LiteralPath (Join-Path $repoRoot "scripts\$scriptName"))) {
+        Add-Failure "Command script is missing: $scriptName"
+    }
+}
+
 $repoText = Get-ChildItem -LiteralPath $repoRoot -Recurse -File |
     Where-Object {
         $_.FullName -notmatch "\\data\\" -and
+        $_.FullName -notmatch "\\dist\\" -and
         $_.FullName -notmatch "\\.git\\" -and
         $_.FullName -notmatch "\\tests\\" -and
         $_.FullName -notmatch "\\scripts\\validate\.ps1$"

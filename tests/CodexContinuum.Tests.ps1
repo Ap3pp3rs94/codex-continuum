@@ -51,6 +51,34 @@ Describe "Codex Continuum package" {
         }
     }
 
+    It "keeps the command wrapper surface" {
+        $entrypoint = Get-Content -LiteralPath (Join-Path $repoRoot "codex-continuum.ps1") -Raw
+        foreach ($pattern in @(
+            "scripts\start-continuum.ps1",
+            "scripts\stop-continuum.ps1",
+            "scripts\get-continuum-status.ps1",
+            "scripts\update-continuum.ps1"
+        )) {
+            if ($entrypoint -notmatch [regex]::Escape($pattern)) {
+                throw "Entrypoint missing command route '$pattern'."
+            }
+        }
+
+        $stopScript = Get-Content -LiteralPath (Join-Path $repoRoot "scripts\stop-continuum.ps1") -Raw
+        foreach ($pattern in @("Stop-Process", "codex_live_continue.stop_requested", "TargetProcessId", "SessionId")) {
+            if ($stopScript -notmatch [regex]::Escape($pattern)) {
+                throw "Stop command missing pattern '$pattern'."
+            }
+        }
+
+        $updateScript = Get-Content -LiteralPath (Join-Path $repoRoot "scripts\update-continuum.ps1") -Raw
+        foreach ($pattern in @("Invoke-WebRequest", "SHA256", "Expand-Archive", ".git", "Validate")) {
+            if ($updateScript -notmatch [regex]::Escape($pattern)) {
+                throw "Update command missing pattern '$pattern'."
+            }
+        }
+    }
+
     It "summarizes Continuum status from receipts" {
         $statusScript = Join-Path $repoRoot "scripts\get-continuum-status.ps1"
         if (-not (Test-Path -LiteralPath $statusScript)) {
@@ -116,6 +144,7 @@ Describe "Codex Continuum package" {
         $text = Get-ChildItem -LiteralPath $repoRoot -Recurse -File |
             Where-Object {
                 $_.FullName -notmatch "\\data\\" -and
+                $_.FullName -notmatch "\\dist\\" -and
                 $_.FullName -notmatch "\\tests\\" -and
                 $_.FullName -notmatch "\\scripts\\validate\.ps1$"
             } |

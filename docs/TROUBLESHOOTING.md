@@ -35,6 +35,31 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plu
 
 Then run with `-TargetProcessId <pid>` instead of `-ProjectName`.
 
+## I Need To Stop It
+
+Run:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" stop
+```
+
+The stop command only targets Continuum watcher processes and records a
+`codex_live_continue.stop_requested` receipt.
+
+## Update Refuses To Run
+
+The updater refuses to overwrite a git checkout. In a cloned repo, use:
+
+```powershell
+git pull
+```
+
+For a release-installed plugin, run:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" update
+```
+
 ## It Never Sends
 
 Run a status check:
