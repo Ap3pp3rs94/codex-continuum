@@ -27,6 +27,24 @@ to wait for a fresh `Working` state before the first continuation.
 powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" -ProjectName "<ProjectName>" -MaxPrompts 3 -TimeoutSeconds 900
 ```
 
+## Status
+
+Read the watcher health summary:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" status
+```
+
+Machine-readable status:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" status -Json
+```
+
+The status report is read-only. It summarizes receipts, watcher processes, the
+target process, last working signal, last prompt, prompt counts, and stale idle
+conditions.
+
 ## Submit Confirmation
 
 Continuum types `continue`, sends a submit key, then waits for Codex to become
@@ -50,7 +68,7 @@ If your terminal title does not use the default Codex spinner prefix, override
 Download the release zip into the Codex plugin folder:
 
 ```powershell
-$version = "0.1.2"
+$version = "0.1.3"
 $zip = Join-Path $env:TEMP "codex-continuum-plugin-v$version.zip"
 Invoke-WebRequest -Uri "https://github.com/Ap3pp3rs94/codex-continuum/releases/download/v$version/codex-continuum-plugin-v$version.zip" -OutFile $zip
 Expand-Archive -Path $zip -DestinationPath "$env:USERPROFILE\.codex\plugins" -Force

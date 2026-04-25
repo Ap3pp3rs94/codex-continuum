@@ -29,6 +29,11 @@ catch {
     Add-Failure "plugin.json is not valid JSON"
 }
 
+$entrypoint = Get-Content -LiteralPath (Join-Path $repoRoot "codex-continuum.ps1") -Raw
+if ($entrypoint -notmatch "get-continuum-status\.ps1") {
+    Add-Failure "Entrypoint does not expose the status command"
+}
+
 $testText = Get-Content -LiteralPath (Join-Path $repoRoot "tests\CodexContinuum.Tests.ps1") -Raw
 if ($testText -match "\bShould\b") {
     Add-Failure "Pester tests use Should syntax; use explicit throw assertions for Pester 3 and 5 compatibility."
@@ -45,6 +50,19 @@ $packager = Get-Content -LiteralPath (Join-Path $repoRoot "scripts\package-plugi
 foreach ($required in @("Compress-Archive", "PACKAGE-MANIFEST.json", ".codex-plugin", "SHA256")) {
     if ($packager -notmatch [regex]::Escape($required)) {
         Add-Failure "Packager missing required behavior: $required"
+    }
+}
+
+$statusScriptPath = Join-Path $repoRoot "scripts\get-continuum-status.ps1"
+if (-not (Test-Path -LiteralPath $statusScriptPath)) {
+    Add-Failure "Status script is missing"
+}
+else {
+    $statusScript = Get-Content -LiteralPath $statusScriptPath -Raw
+    foreach ($required in @("Get-ContinuumSummary", "IdleStale", "LastPrompt", "Watcher", "Target", "ReceiptParseFailures")) {
+        if ($statusScript -notmatch [regex]::Escape($required)) {
+            Add-Failure "Status script missing required behavior: $required"
+        }
     }
 }
 

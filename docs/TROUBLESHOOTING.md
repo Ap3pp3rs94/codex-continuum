@@ -37,6 +37,16 @@ Then run with `-TargetProcessId <pid>` instead of `-ProjectName`.
 
 ## It Never Sends
 
+Run a status check:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" status
+```
+
+If `State` is `IdleStale`, Continuum saw the target idle longer than the stale
+threshold without a confirmed prompt. Check `Action`, `LastPrompt`, and
+`Watcher.ProcessIds` in the report.
+
 Run a probe:
 
 ```powershell

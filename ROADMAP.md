@@ -7,11 +7,12 @@
 - JSONL receipts.
 - Local install and validation scripts.
 - Packaged release artifacts.
+- Read-only watcher health summaries from receipts.
 
 ## 0.2
 
 - Add a first-class `Start-Continuum` PowerShell module wrapper.
-- Add richer receipt summaries for confirmed vs unconfirmed submit attempts.
+- Add richer receipt exports for confirmed vs unconfirmed submit attempts.
 - Add optional Windows Terminal profile/title helpers.
 
 ## 0.3

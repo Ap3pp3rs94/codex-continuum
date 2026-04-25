@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.3
+
+- Added a read-only `status` command that summarizes watcher health from JSONL
+  receipts and live process metadata.
+- Added stale-idle detection for cases where Continuum should have continued
+  but did not.
+
 ## 0.1.2
 
 - Match Codex title spinners after Windows title prefixes such as

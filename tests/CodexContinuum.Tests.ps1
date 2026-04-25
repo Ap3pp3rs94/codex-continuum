@@ -51,6 +51,67 @@ Describe "Codex Continuum package" {
         }
     }
 
+    It "summarizes Continuum status from receipts" {
+        $statusScript = Join-Path $repoRoot "scripts\get-continuum-status.ps1"
+        if (-not (Test-Path -LiteralPath $statusScript)) {
+            throw "Status script is missing."
+        }
+
+        $entrypoint = Get-Content -LiteralPath (Join-Path $repoRoot "codex-continuum.ps1") -Raw
+        if ($entrypoint -notmatch "get-continuum-status\.ps1") {
+            throw "Entrypoint does not route to the status script."
+        }
+
+        $receipt = Join-Path ([System.IO.Path]::GetTempPath()) "codex-continuum-status-test-$PID.jsonl"
+        $now = [DateTimeOffset]::Now
+        @(
+            ([ordered]@{
+                ts = $now.AddSeconds(-10).ToString("o")
+                event = "codex_live_continue.attached"
+                target_process_id = $PID
+                session_id = "test-session"
+                handle = "0x1"
+                title_working_pattern = "(^|:\s*)[\u280b]\s+"
+            } | ConvertTo-Json -Compress),
+            ([ordered]@{
+                ts = $now.AddSeconds(-4).ToString("o")
+                event = "codex_live_continue.status"
+                working = $true
+                working_signal = "title"
+                title = "Test"
+            } | ConvertTo-Json -Compress),
+            ([ordered]@{
+                ts = $now.AddSeconds(-2).ToString("o")
+                event = "codex_live_continue.prompt"
+                sent = $true
+                prompt_count = 1
+                prompt_attempts = 1
+                input_method = "test-confirmed-title"
+                confirmed_work_observed = $true
+                error = ""
+            } | ConvertTo-Json -Compress)
+        ) | Set-Content -LiteralPath $receipt -Encoding UTF8
+
+        try {
+            $json = & $statusScript -ReceiptPath $receipt -Json
+            $summary = ($json | Out-String) | ConvertFrom-Json
+            if ($summary.ReceiptExists -ne $true) {
+                throw "Status did not report receipt existence."
+            }
+
+            if ($summary.Session.Id -ne "test-session") {
+                throw "Status did not report the session id."
+            }
+
+            if ($summary.LastPrompt.PromptCount -ne 1) {
+                throw "Status did not report prompt count."
+            }
+        }
+        finally {
+            Remove-Item -LiteralPath $receipt -Force -ErrorAction SilentlyContinue
+        }
+    }
+
     It "does not keep the old project-specific type name" {
         $text = Get-ChildItem -LiteralPath $repoRoot -Recurse -File |
             Where-Object {

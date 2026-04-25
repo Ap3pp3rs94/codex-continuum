@@ -23,6 +23,7 @@ transcript replay.
 - Retries foreground activation before typing, then keeps watching if Windows
   blocks one focus handoff.
 - Writes JSONL receipts for attach, status, prompt, and stop events.
+- Reports watcher health from receipts with `status`.
 - Runs until Ctrl+C by default.
 
 ## Quick Start
@@ -56,12 +57,18 @@ Stop it with Ctrl+C in the watcher PowerShell window.
 If you do not want the startup idle kick, add
 `-RequireObservedWorkingBeforeFirstPrompt`.
 
+Check watcher health:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" status
+```
+
 ## Install
 
 From the latest GitHub release:
 
 ```powershell
-$version = "0.1.2"
+$version = "0.1.3"
 $zip = Join-Path $env:TEMP "codex-continuum-plugin-v$version.zip"
 Invoke-WebRequest -Uri "https://github.com/Ap3pp3rs94/codex-continuum/releases/download/v$version/codex-continuum-plugin-v$version.zip" -OutFile $zip
 Expand-Archive -Path $zip -DestinationPath "$env:USERPROFILE\.codex\plugins" -Force
@@ -95,6 +102,12 @@ Receipts default to:
 ```
 
 Runtime receipts are ignored by git.
+
+Use the status command to turn those receipts into a health summary:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" status -Json
+```
 
 ## Boundaries
 
