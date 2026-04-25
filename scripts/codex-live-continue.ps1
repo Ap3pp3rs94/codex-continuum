@@ -98,6 +98,21 @@ public static class CodexContinuumWindow
     [DllImport("user32.dll")]
     public static extern bool SetForegroundWindow(IntPtr hWnd);
 
+    [DllImport("user32.dll")]
+    public static extern bool BringWindowToTop(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+    [DllImport("kernel32.dll")]
+    public static extern uint GetCurrentThreadId();
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
 
@@ -105,8 +120,10 @@ public static class CodexContinuumWindow
     private static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
 
     private const int INPUT_KEYBOARD = 1;
+    private const int SW_RESTORE = 9;
     private const uint KEYEVENTF_KEYUP = 0x0002;
     private const uint KEYEVENTF_UNICODE = 0x0004;
+    private const ushort VK_MENU = 0x12;
     private const ushort VK_ESCAPE = 0x1B;
     private const ushort VK_RETURN = 0x0D;
 
@@ -139,6 +156,68 @@ public static class CodexContinuumWindow
         StringBuilder title = new StringBuilder(512);
         GetWindowText(hWnd, title, title.Capacity);
         return title.ToString();
+    }
+
+    public static bool ForceForegroundWindow(IntPtr hWnd)
+    {
+        if (!IsWindow(hWnd))
+        {
+            return false;
+        }
+
+        IntPtr foreground = GetForegroundWindow();
+        if (foreground == hWnd)
+        {
+            return true;
+        }
+
+        ShowWindowAsync(hWnd, SW_RESTORE);
+
+        uint foregroundProcessId;
+        uint targetProcessId;
+        uint currentThread = GetCurrentThreadId();
+        uint foregroundThread = foreground == IntPtr.Zero ? 0 : GetWindowThreadProcessId(foreground, out foregroundProcessId);
+        uint targetThread = GetWindowThreadProcessId(hWnd, out targetProcessId);
+        bool attachedForeground = false;
+        bool attachedTarget = false;
+
+        try
+        {
+            if (foregroundThread != 0 && foregroundThread != currentThread)
+            {
+                attachedForeground = AttachThreadInput(currentThread, foregroundThread, true);
+            }
+
+            if (targetThread != 0 && targetThread != currentThread)
+            {
+                attachedTarget = AttachThreadInput(currentThread, targetThread, true);
+            }
+
+            try
+            {
+                SendVirtualKey(VK_MENU);
+            }
+            catch
+            {
+            }
+
+            BringWindowToTop(hWnd);
+            SetForegroundWindow(hWnd);
+        }
+        finally
+        {
+            if (attachedTarget)
+            {
+                AttachThreadInput(currentThread, targetThread, false);
+            }
+
+            if (attachedForeground)
+            {
+                AttachThreadInput(currentThread, foregroundThread, false);
+            }
+        }
+
+        return GetForegroundWindow() == hWnd;
     }
 
     private static void SendUnicodeChar(char value)
@@ -195,6 +274,11 @@ public static class CodexContinuumWindow
     public static void SendEnterKey()
     {
         SendVirtualKey(VK_RETURN);
+    }
+
+    public static void SendAltKey()
+    {
+        SendVirtualKey(VK_MENU);
     }
 
     public static void SendEscapeKey()
@@ -430,16 +514,50 @@ function Get-LiveSessionWorkingState {
     }
 }
 
+function Set-LiveSessionForeground {
+    param(
+        [Parameter(Mandatory = $true)]
+        [IntPtr]$Handle
+    )
+
+    for ($attempt = 1; $attempt -le 5; $attempt += 1) {
+        if ([CodexContinuumWindow]::GetForegroundWindow() -eq $Handle) {
+            return "already-foreground"
+        }
+
+        if ([CodexContinuumWindow]::ForceForegroundWindow($Handle)) {
+            Start-Sleep -Milliseconds 200
+            if ([CodexContinuumWindow]::GetForegroundWindow() -eq $Handle) {
+                return "force-foreground-$attempt"
+            }
+        }
+
+        try {
+            [CodexContinuumWindow]::SendAltKey()
+        }
+        catch {
+            [System.Windows.Forms.SendKeys]::SendWait("%")
+        }
+
+        Start-Sleep -Milliseconds 150
+        [void][CodexContinuumWindow]::SetForegroundWindow($Handle)
+        Start-Sleep -Milliseconds 250
+    }
+
+    return "foreground-failed"
+}
+
 function Send-ContinuePrompt {
     param(
         [Parameter(Mandatory = $true)]
         [IntPtr]$Handle
     )
 
-    [void][CodexContinuumWindow]::SetForegroundWindow($Handle)
-    Start-Sleep -Milliseconds 150
+    $activationMethod = Set-LiveSessionForeground -Handle $Handle
     if ([CodexContinuumWindow]::GetForegroundWindow() -ne $Handle) {
-        throw "target_window_not_foreground"
+        $currentHandle = [CodexContinuumWindow]::GetForegroundWindow()
+        $currentHandleId = ("0x{0:x}" -f $currentHandle.ToInt64())
+        throw "target_window_not_foreground activation=$activationMethod current=$currentHandleId"
     }
 
     try {
@@ -497,12 +615,12 @@ function Send-ContinuePrompt {
             Start-Sleep -Milliseconds 250
             $state = Get-LiveSessionWorkingState -Handle $Handle
             if ($state.Working) {
-                return "$textMethod+$submitMethod-confirmed-$($state.WorkingSignal)"
+                return "$activationMethod+$textMethod+$submitMethod-confirmed-$($state.WorkingSignal)"
             }
         }
     }
 
-    return "$textMethod+$($submitMethods -join '+')-unconfirmed"
+    return "$activationMethod+$textMethod+$($submitMethods -join '+')-unconfirmed"
 }
 
 function Resolve-LiveSessionHandle {
@@ -605,6 +723,7 @@ $observedWorking = -not [bool]$RequireObservedWorkingBeforeFirstPrompt
 $clearSince = $null
 $lastPromptAt = (Get-Date).AddSeconds(-1 * ($CooldownSeconds + 1))
 $sentPrompts = 0
+$promptAttempts = 0
 $lastObservedState = $null
 $focusPaused = $false
 $stopReason = "ctrl_c_or_process_exit"
@@ -704,15 +823,32 @@ while ($MaxPrompts -eq 0 -or $sentPrompts -lt $MaxPrompts) {
             $action = "send prompt '$Prompt' to the attached live Codex session"
             $sent = $false
             $inputMethod = ""
+            $sendError = ""
             if ($PSCmdlet.ShouldProcess($target, $action)) {
-                $inputMethod = Send-ContinuePrompt -Handle $sessionHandle
-                $sent = $true
+                $promptAttempts += 1
+                try {
+                    $inputMethod = Send-ContinuePrompt -Handle $sessionHandle
+                    $sent = $true
+                }
+                catch {
+                    $inputMethod = "send-failed"
+                    $sendError = $_.Exception.Message
+                }
             }
 
-            $sentPrompts += 1
+            if ($sent -or $WhatIfPreference) {
+                $sentPrompts += 1
+            }
+
             $lastPromptAt = Get-Date
-            $observedWorking = $false
-            $clearSince = $null
+            if ($sent -or $WhatIfPreference) {
+                $observedWorking = $false
+                $clearSince = $null
+            }
+            else {
+                $observedWorking = $true
+                $clearSince = Get-Date
+            }
 
             Write-Receipt -Event "codex_live_continue.prompt" -Data @{
                 handle = $handleId
@@ -720,13 +856,18 @@ while ($MaxPrompts -eq 0 -or $sentPrompts -lt $MaxPrompts) {
                 sent = $sent
                 what_if = [bool]$WhatIfPreference
                 prompt_count = $sentPrompts
+                prompt_attempts = $promptAttempts
                 session_id = $SessionId
                 input_method = $inputMethod
+                error = $sendError
             }
 
             if ($sent) {
                 $limitLabel = if ($MaxPrompts -eq 0) { "unlimited" } else { [string]$MaxPrompts }
                 Write-Host "Sent live-session continuation prompt $sentPrompts/$limitLabel."
+            }
+            elseif (-not [string]::IsNullOrWhiteSpace($sendError)) {
+                Write-Host "Continuation send failed and will retry after cooldown: $sendError"
             }
             else {
                 $limitLabel = if ($MaxPrompts -eq 0) { "unlimited" } else { [string]$MaxPrompts }
@@ -748,6 +889,7 @@ Write-Receipt -Event "codex_live_continue.stopped" -Data @{
     handle = $handleId
     reason = $stopReason
     prompts_sent = $sentPrompts
+    prompt_attempts = $promptAttempts
     session_id = $SessionId
 }
 }

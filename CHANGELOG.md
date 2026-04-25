@@ -9,6 +9,8 @@
   PowerShell title can swallow both text and Enter.
 - Detect active Codex work from the window-title spinner when the bottom
   `Working` text is not exposed by UI Automation.
+- Harden foreground activation so the watcher can move focus back to the live
+  Codex window before typing, and keep running if Windows blocks one attempt.
 - Added universal `-ProjectName` targeting for live Codex PowerShell windows.
 - Added process-id and window-handle targeting.
 - Added confirmed submit behavior: after typing `continue`, Continuum submits

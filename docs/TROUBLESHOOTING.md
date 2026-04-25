@@ -18,6 +18,13 @@ Get-Content "$env:USERPROFILE\.codex\plugins\codex-continuum\data\operator\codex
 Look for `input_method`. A healthy submit usually ends with
 `-confirmed-text` or `-confirmed-title`.
 
+## target_window_not_foreground
+
+Use the current build. Continuum now retries foreground activation with a Win32
+thread-input handoff before typing. If Windows still blocks focus, the watcher
+records `input_method:"send-failed"` with the error and retries after cooldown
+instead of exiting.
+
 ## It Finds The Wrong Window
 
 List candidates:

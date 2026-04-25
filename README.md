@@ -20,6 +20,8 @@ transcript replay.
   still continues the session.
 - Falls back across multiple submit keys if one Enter path types but does not
   submit.
+- Retries foreground activation before typing, then keeps watching if Windows
+  blocks one focus handoff.
 - Writes JSONL receipts for attach, status, prompt, and stop events.
 - Runs until Ctrl+C by default.
 

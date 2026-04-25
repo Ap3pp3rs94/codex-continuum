@@ -17,6 +17,9 @@ Describe "Codex Continuum package" {
         $watcher | Should Match "-confirmed"
         $watcher | Should Match "TitleWorkingPattern"
         $watcher | Should Match "WorkingSignal"
+        $watcher | Should Match "ForceForegroundWindow"
+        $watcher | Should Match "Set-LiveSessionForeground"
+        $watcher | Should Match "prompt_attempts"
         $watcher | Should Match "RequireObservedWorkingBeforeFirstPrompt"
         $watcher | Should Match 'observedWorking = -not'
     }
