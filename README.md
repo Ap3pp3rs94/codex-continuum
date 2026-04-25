@@ -58,10 +58,26 @@ If you do not want the startup idle kick, add
 
 ## Install
 
-From this repo:
+From the latest GitHub release:
+
+```powershell
+$version = "0.1.1"
+$zip = Join-Path $env:TEMP "codex-continuum-plugin-v$version.zip"
+Invoke-WebRequest -Uri "https://github.com/Ap3pp3rs94/codex-continuum/releases/download/v$version/codex-continuum-plugin-v$version.zip" -OutFile $zip
+Expand-Archive -Path $zip -DestinationPath "$env:USERPROFILE\.codex\plugins" -Force
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\scripts\validate.ps1"
+```
+
+From a cloned repo:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1
+```
+
+Build a distributable plugin zip:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\package-plugin.ps1 -Force
 ```
 
 Validate the package:

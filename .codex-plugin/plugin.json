@@ -1,14 +1,14 @@
 {
   "name": "codex-continuum",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Universal Windows live-session continuation package for Codex.",
   "author": {
     "name": "Ap3pp",
     "email": "",
-    "url": ""
+    "url": "https://github.com/Ap3pp3rs94"
   },
-  "homepage": "",
-  "repository": "",
+  "homepage": "https://github.com/Ap3pp3rs94/codex-continuum",
+  "repository": "https://github.com/Ap3pp3rs94/codex-continuum",
   "license": "MIT",
   "keywords": [
     "codex",
@@ -32,7 +32,7 @@
       "Live Codex continuation",
       "Local Windows UI automation"
     ],
-    "websiteURL": "",
+    "websiteURL": "https://github.com/Ap3pp3rs94/codex-continuum",
     "privacyPolicyURL": "",
     "termsOfServiceURL": "",
     "defaultPrompt": [

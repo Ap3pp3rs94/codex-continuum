@@ -10,6 +10,7 @@ data/
 .idea/
 
 # Test/cache output
+dist/
 TestResults/
 coverage/
 .cache/

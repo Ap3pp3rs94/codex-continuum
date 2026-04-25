@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1
+
+- Added reproducible plugin zip packaging.
+- Added GitHub release instructions and release workflow.
+- Filled public repository metadata in the Codex plugin manifest.
+
 ## 0.1.0
 
 - Fixed startup idle behavior so attaching after Codex has already finished

@@ -35,6 +35,20 @@ Describe "Codex Continuum package" {
         }
     }
 
+    It "keeps the downloadable plugin packager" {
+        $packager = Join-Path $repoRoot "scripts\package-plugin.ps1"
+        if (-not (Test-Path -LiteralPath $packager)) {
+            throw "Package script is missing."
+        }
+
+        $packagerText = Get-Content -LiteralPath $packager -Raw
+        foreach ($pattern in @("Compress-Archive", "PACKAGE-MANIFEST.json", ".codex-plugin", "SHA256")) {
+            if ($packagerText -notmatch [regex]::Escape($pattern)) {
+                throw "Package script missing pattern '$pattern'."
+            }
+        }
+    }
+
     It "does not keep the old project-specific type name" {
         $text = Get-ChildItem -LiteralPath $repoRoot -Recurse -File |
             Where-Object {

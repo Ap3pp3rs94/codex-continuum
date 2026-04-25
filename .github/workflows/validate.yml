@@ -16,3 +16,7 @@ jobs:
       - name: Validate package
         shell: powershell
         run: powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate.ps1
+
+      - name: Build plugin zip
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\package-plugin.ps1 -Force

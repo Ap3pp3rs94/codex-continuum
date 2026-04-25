@@ -20,3 +20,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate.ps1
 ```
 
 If Pester is installed, the validation script also runs `tests/*.Tests.ps1`.
+
+## Package
+
+Run:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\package-plugin.ps1 -Force
+```
+
+Release artifacts are written to `dist/` and are not committed.

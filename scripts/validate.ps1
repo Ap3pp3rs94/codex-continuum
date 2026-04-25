@@ -41,6 +41,13 @@ foreach ($required in @("SubmitConfirmMilliseconds", "sendkeys-tilde", "sendkeys
     }
 }
 
+$packager = Get-Content -LiteralPath (Join-Path $repoRoot "scripts\package-plugin.ps1") -Raw
+foreach ($required in @("Compress-Archive", "PACKAGE-MANIFEST.json", ".codex-plugin", "SHA256")) {
+    if ($packager -notmatch [regex]::Escape($required)) {
+        Add-Failure "Packager missing required behavior: $required"
+    }
+}
+
 $repoText = Get-ChildItem -LiteralPath $repoRoot -Recurse -File |
     Where-Object {
         $_.FullName -notmatch "\\data\\" -and

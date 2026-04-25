@@ -6,6 +6,7 @@
 - Confirmed submit after typing `continue`.
 - JSONL receipts.
 - Local install and validation scripts.
+- Packaged release artifacts.
 
 ## 0.2
 
@@ -15,7 +16,6 @@
 
 ## 0.3
 
-- Add packaged release artifacts.
 - Add signed-script guidance.
 - Add broader terminal-host compatibility notes.
 
