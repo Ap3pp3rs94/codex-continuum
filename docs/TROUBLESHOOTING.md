@@ -46,6 +46,22 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plu
 The stop command only targets Continuum watcher processes and records a
 `codex_live_continue.stop_requested` receipt.
 
+## It Paused For Usage
+
+Run:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" status
+```
+
+If `State` is `UsagePaused`, Continuum saw a usage-limit or reset warning in the
+live Codex window and intentionally stopped sending `continue`. The
+`UsagePause` section shows `Until`, `RemainingSeconds`, `Reason`, and the
+captured warning text. It resumes automatically after `Until`.
+
+If the warning text is visible only outside the bottom terminal region, restart
+with `-AllowFullWindowFallback` so Continuum can inspect the full window.
+
 ## Update Refuses To Run
 
 The updater refuses to overwrite a git checkout. In a cloned repo, use:

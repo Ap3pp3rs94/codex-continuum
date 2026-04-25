@@ -42,7 +42,7 @@ if ($testText -match "\bShould\b") {
 }
 
 $watcher = Get-Content -LiteralPath (Join-Path $repoRoot "scripts\codex-live-continue.ps1") -Raw
-foreach ($required in @("SubmitConfirmMilliseconds", "sendkeys-tilde", "sendkeys-ctrl-m", "SendEnterKey", "SendEscapeKey", "-confirmed", "TitleWorkingPattern", "WorkingSignal", "ForceForegroundWindow", "Set-LiveSessionForeground", "prompt_attempts", "confirmed_work_observed", "send_confirmation", "RequireObservedWorkingBeforeFirstPrompt", "observedWorking = -not")) {
+foreach ($required in @("SubmitConfirmMilliseconds", "sendkeys-tilde", "sendkeys-ctrl-m", "SendEnterKey", "SendEscapeKey", "-confirmed", "TitleWorkingPattern", "WorkingSignal", "ForceForegroundWindow", "Set-LiveSessionForeground", "prompt_attempts", "confirmed_work_observed", "send_confirmation", "RequireObservedWorkingBeforeFirstPrompt", "observedWorking = -not", "UsageWarningPattern", "UsagePauseFallbackSeconds", "Get-UsagePauseState", "codex_live_continue.usage_paused", "codex_live_continue.usage_resumed")) {
     if ($watcher -notmatch [regex]::Escape($required)) {
         Add-Failure "Watcher missing required submit behavior: $required"
     }
@@ -61,7 +61,7 @@ if (-not (Test-Path -LiteralPath $statusScriptPath)) {
 }
 else {
     $statusScript = Get-Content -LiteralPath $statusScriptPath -Raw
-    foreach ($required in @("Get-ContinuumSummary", "IdleStale", "LastPrompt", "Watcher", "Target", "ReceiptParseFailures")) {
+    foreach ($required in @("Get-ContinuumSummary", "IdleStale", "LastPrompt", "Watcher", "Target", "ReceiptParseFailures", "UsagePause", "UsagePaused")) {
         if ($statusScript -notmatch [regex]::Escape($required)) {
             Add-Failure "Status script missing required behavior: $required"
         }

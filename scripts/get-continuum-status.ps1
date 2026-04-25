@@ -62,6 +62,25 @@ function Convert-ReceiptTime {
     }
 }
 
+function Convert-ReceiptFieldTime {
+    param(
+        [object]$Event,
+        [string]$Name
+    )
+
+    $raw = [string](Get-PropertyValue -Object $Event -Name $Name -Default "")
+    if ([string]::IsNullOrWhiteSpace($raw)) {
+        return $null
+    }
+
+    try {
+        return [DateTimeOffset]::Parse($raw)
+    }
+    catch {
+        return $null
+    }
+}
+
 function Get-AgeSeconds {
     param([object]$Time)
 
@@ -70,6 +89,16 @@ function Get-AgeSeconds {
     }
 
     return [int][Math]::Max(0, [Math]::Round(([DateTimeOffset]::Now - $Time).TotalSeconds))
+}
+
+function Get-RemainingSeconds {
+    param([object]$Time)
+
+    if ($null -eq $Time) {
+        return $null
+    }
+
+    return [int][Math]::Max(0, [Math]::Ceiling(($Time - [DateTimeOffset]::Now).TotalSeconds))
 }
 
 function Select-LastReceiptEvent {
@@ -143,12 +172,17 @@ function Get-ContinuumSummary {
     $lastStatus = Select-LastReceiptEvent -Events $eventArray -Name "codex_live_continue.status"
     $lastPrompt = Select-LastReceiptEvent -Events $eventArray -Name "codex_live_continue.prompt"
     $lastStopped = Select-LastReceiptEvent -Events $eventArray -Name "codex_live_continue.stopped"
+    $lastUsagePaused = Select-LastReceiptEvent -Events $eventArray -Name "codex_live_continue.usage_paused"
+    $lastUsageResumed = Select-LastReceiptEvent -Events $eventArray -Name "codex_live_continue.usage_resumed"
 
     $lastEventTime = Convert-ReceiptTime -Event $lastEvent
     $lastAttachedTime = Convert-ReceiptTime -Event $lastAttached
     $lastStatusTime = Convert-ReceiptTime -Event $lastStatus
     $lastPromptTime = Convert-ReceiptTime -Event $lastPrompt
     $lastStoppedTime = Convert-ReceiptTime -Event $lastStopped
+    $lastUsagePausedTime = Convert-ReceiptTime -Event $lastUsagePaused
+    $lastUsageResumedTime = Convert-ReceiptTime -Event $lastUsageResumed
+    $usagePauseUntil = Convert-ReceiptFieldTime -Event $lastUsagePaused -Name "pause_until"
 
     $targetProcessId = [int](Get-PropertyValue -Object $lastAttached -Name "target_process_id" -Default 0)
     $targetProcess = $null
@@ -180,6 +214,18 @@ function Get-ContinuumSummary {
     $stoppedAfterAttach = $false
     if ($null -ne $lastStoppedTime -and $null -ne $lastAttachedTime) {
         $stoppedAfterAttach = $lastStoppedTime -gt $lastAttachedTime
+    }
+
+    $usagePauseActive = $false
+    if ($null -ne $lastUsagePausedTime -and $null -ne $usagePauseUntil) {
+        $usagePauseActive = $usagePauseUntil -gt [DateTimeOffset]::Now
+        if ($null -ne $lastUsageResumedTime -and $lastUsageResumedTime -gt $lastUsagePausedTime) {
+            $usagePauseActive = $false
+        }
+
+        if ($null -ne $lastStoppedTime -and $lastStoppedTime -gt $lastUsagePausedTime) {
+            $usagePauseActive = $false
+        }
     }
 
     $idleAge = $null
@@ -215,6 +261,11 @@ function Get-ContinuumSummary {
         $state = "TargetMissing"
         $health = "Attention"
         $action = "Restart Continuum against a live Codex window."
+    }
+    elseif ($usagePauseActive) {
+        $state = "UsagePaused"
+        $health = "Paused"
+        $action = "Waiting for Codex usage reset before sending more continuation prompts."
     }
     elseif (-not [string]::IsNullOrWhiteSpace($lastPromptError) -and -not $liveWorkingByTitle -and -not $lastStatusWorking) {
         $state = "LastPromptFailed"
@@ -285,6 +336,16 @@ function Get-ContinuumSummary {
             InputMethod = [string](Get-PropertyValue -Object $lastPrompt -Name "input_method" -Default "")
             ConfirmedWorkObserved = Convert-ToBoolean (Get-PropertyValue -Object $lastPrompt -Name "confirmed_work_observed" -Default $false)
             Error = $lastPromptError
+        }
+        UsagePause = [pscustomobject]@{
+            Active = [bool]$usagePauseActive
+            PausedAt = if ($null -eq $lastUsagePausedTime) { $null } else { $lastUsagePausedTime.ToString("o") }
+            ResumedAt = if ($null -eq $lastUsageResumedTime) { $null } else { $lastUsageResumedTime.ToString("o") }
+            Until = if ($null -eq $usagePauseUntil) { $null } else { $usagePauseUntil.ToString("o") }
+            RemainingSeconds = Get-RemainingSeconds -Time $usagePauseUntil
+            Reason = [string](Get-PropertyValue -Object $lastUsagePaused -Name "reason" -Default "")
+            FallbackUsed = Convert-ToBoolean (Get-PropertyValue -Object $lastUsagePaused -Name "fallback_used" -Default $false)
+            MatchedText = [string](Get-PropertyValue -Object $lastUsagePaused -Name "matched_text" -Default "")
         }
         LastStopped = [pscustomobject]@{
             At = if ($null -eq $lastStoppedTime) { $null } else { $lastStoppedTime.ToString("o") }

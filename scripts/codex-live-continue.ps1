@@ -9,6 +9,11 @@ param(
 
     [string]$TitleWorkingPattern = "(^|:\s*)[\u280b\u2819\u2839\u2838\u283c\u2834\u2826\u2827\u2807\u280f]\s+",
 
+    [string]$UsageWarningPattern = "(?i)(usage limit|rate limit|limit reached|usage capped|quota|try again.*(?:at|in)|resets?\s+(?:at|in)|reset\s+(?:at|in|time))",
+
+    [ValidateRange(0, 604800)]
+    [int]$UsagePauseFallbackSeconds = 3600,
+
     [ValidateRange(100, 10000)]
     [int]$PollMilliseconds = 750,
 
@@ -57,6 +62,8 @@ param(
     [switch]$ExitOnFocusLoss,
 
     [switch]$PauseWhenTargetNotForeground,
+
+    [switch]$DisableUsageLimitPause,
 
     [switch]$VerboseStatusText
 )
@@ -514,6 +521,154 @@ function Get-LiveSessionWorkingState {
     }
 }
 
+function Select-UsageWarningContext {
+    param(
+        [string]$Text
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        return ""
+    }
+
+    $lines = @(
+        $Text -split "\r?\n" |
+            ForEach-Object { $_.Trim() } |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    )
+
+    foreach ($line in $lines) {
+        if ($line -match $UsageWarningPattern) {
+            if ($line.Length -gt 500) {
+                return $line.Substring(0, 500)
+            }
+
+            return $line
+        }
+    }
+
+    $tail = Select-TailText -Text $Text -LineCount $TailLines
+    if ($tail.Length -gt 500) {
+        return $tail.Substring(0, 500)
+    }
+
+    return $tail
+}
+
+function ConvertTo-UsagePauseSeconds {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$DurationText
+    )
+
+    $seconds = 0.0
+    $matches = [regex]::Matches($DurationText, "(?i)(?<value>\d+(?:\.\d+)?)\s*(?<unit>h|hr|hrs|hour|hours|m|min|mins|minute|minutes|s|sec|secs|second|seconds)")
+    foreach ($match in $matches) {
+        $value = [double]::Parse($match.Groups["value"].Value, [System.Globalization.CultureInfo]::InvariantCulture)
+        $unit = $match.Groups["unit"].Value.ToLowerInvariant()
+        if ($unit -in @("h", "hr", "hrs", "hour", "hours")) {
+            $seconds += ($value * 3600)
+        }
+        elseif ($unit -in @("m", "min", "mins", "minute", "minutes")) {
+            $seconds += ($value * 60)
+        }
+        else {
+            $seconds += $value
+        }
+    }
+
+    return [int][Math]::Ceiling($seconds)
+}
+
+function Get-UsagePauseState {
+    param(
+        [string]$Text,
+
+        [Parameter(Mandatory = $true)]
+        [DateTimeOffset]$Now
+    )
+
+    if ($DisableUsageLimitPause -or [string]::IsNullOrWhiteSpace($Text) -or $Text -notmatch $UsageWarningPattern) {
+        return [pscustomobject]@{
+            Detected = $false
+            PauseUntil = $null
+            Reason = ""
+            MatchedText = ""
+            FallbackUsed = $false
+        }
+    }
+
+    $context = Select-UsageWarningContext -Text $Text
+    $pauseUntil = $null
+    $reason = ""
+    $fallbackUsed = $false
+
+    $isoMatch = [regex]::Match($context, "(?<ts>\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:\s?(?:Z|[+-]\d{2}:?\d{2}))?)")
+    if ($isoMatch.Success) {
+        $parsed = [DateTimeOffset]::MinValue
+        if ([DateTimeOffset]::TryParse($isoMatch.Groups["ts"].Value, [ref]$parsed) -and $parsed -gt $Now) {
+            $pauseUntil = $parsed
+            $reason = "iso_reset_time"
+        }
+    }
+
+    if ($null -eq $pauseUntil) {
+        $relativeMatch = [regex]::Match($context, "(?i)\b(?:in|after)\s+(?<duration>(?:\d+(?:\.\d+)?\s*(?:h|hr|hrs|hour|hours|m|min|mins|minute|minutes|s|sec|secs|second|seconds)\s*){1,4})")
+        if ($relativeMatch.Success) {
+            $seconds = ConvertTo-UsagePauseSeconds -DurationText $relativeMatch.Groups["duration"].Value
+            if ($seconds -gt 0) {
+                $pauseUntil = $Now.AddSeconds($seconds)
+                $reason = "relative_reset_time"
+            }
+        }
+    }
+
+    if ($null -eq $pauseUntil) {
+        $timeMatch = [regex]::Match($context, "(?i)\b(?:resets?|reset|try again|available|renews?)\s+(?:at|on)\s+(?<hour>\d{1,2})(?::(?<minute>\d{2}))?\s*(?<ampm>a\.?m\.?|p\.?m\.?|am|pm)?")
+        if ($timeMatch.Success) {
+            $hour = [int]$timeMatch.Groups["hour"].Value
+            $minute = if ($timeMatch.Groups["minute"].Success) { [int]$timeMatch.Groups["minute"].Value } else { 0 }
+            $ampm = $timeMatch.Groups["ampm"].Value.ToLowerInvariant().Replace(".", "")
+
+            if ($hour -ge 1 -and $hour -le 24 -and $minute -ge 0 -and $minute -le 59) {
+                if ($ampm -eq "pm" -and $hour -lt 12) {
+                    $hour += 12
+                }
+                elseif ($ampm -eq "am" -and $hour -eq 12) {
+                    $hour = 0
+                }
+                elseif ([string]::IsNullOrWhiteSpace($ampm) -and $hour -eq 24) {
+                    $hour = 0
+                }
+
+                if ($hour -ge 0 -and $hour -le 23) {
+                    $candidateDate = [datetime]::new($Now.Year, $Now.Month, $Now.Day, $hour, $minute, 0)
+                    $candidate = [DateTimeOffset]::new($candidateDate, $Now.Offset)
+                    if ($candidate -le $Now) {
+                        $candidate = $candidate.AddDays(1)
+                    }
+
+                    $pauseUntil = $candidate
+                    $reason = "clock_reset_time"
+                }
+            }
+        }
+    }
+
+    if ($null -eq $pauseUntil -and $UsagePauseFallbackSeconds -gt 0) {
+        $pauseUntil = $Now.AddSeconds($UsagePauseFallbackSeconds)
+        $reason = "fallback_reset_time"
+        $fallbackUsed = $true
+    }
+
+    return [pscustomobject]@{
+        Detected = $true
+        PauseUntil = $pauseUntil
+        Reason = $reason
+        MatchedText = $context
+        FallbackUsed = $fallbackUsed
+    }
+}
+
 function Set-LiveSessionForeground {
     param(
         [Parameter(Mandatory = $true)]
@@ -681,6 +836,8 @@ Write-Receipt -Event "codex_live_continue.attached" -Data @{
     tail_lines = $TailLines
     status_pattern = $StatusPattern
     title_working_pattern = $TitleWorkingPattern
+    usage_warning_pattern = $UsageWarningPattern
+    usage_pause_fallback_s = $UsagePauseFallbackSeconds
     timeout_s = $TimeoutSeconds
     window_title_pattern = $WindowTitlePattern
     session_id = $SessionId
@@ -689,6 +846,7 @@ Write-Receipt -Event "codex_live_continue.attached" -Data @{
     probe_only = [bool]$ProbeOnly
     exit_on_focus_loss = [bool]$ExitOnFocusLoss
     pause_when_target_not_foreground = [bool]$PauseWhenTargetNotForeground
+    disable_usage_limit_pause = [bool]$DisableUsageLimitPause
     what_if = [bool]$WhatIfPreference
 }
 
@@ -726,6 +884,10 @@ $sentPrompts = 0
 $promptAttempts = 0
 $lastObservedState = $null
 $focusPaused = $false
+$usagePausedUntil = $null
+$usagePauseReason = ""
+$usagePauseMatchedText = ""
+$usagePauseFallbackUsed = $false
 $stopReason = "ctrl_c_or_process_exit"
 
 try {
@@ -803,6 +965,54 @@ while ($MaxPrompts -eq 0 -or $sentPrompts -lt $MaxPrompts) {
             included_accessible_elements = [int]$status.IncludedCount
             used_full_window_fallback = [bool]$status.UsedFallback
             session_id = $SessionId
+        }
+    }
+
+    if (-not $DisableUsageLimitPause) {
+        $now = [DateTimeOffset]::Now
+        if ($null -ne $usagePausedUntil) {
+            if ($now -lt $usagePausedUntil) {
+                Start-Sleep -Milliseconds $PollMilliseconds
+                continue
+            }
+
+            Write-Receipt -Event "codex_live_continue.usage_resumed" -Data @{
+                handle = $handleId
+                pause_until = ([DateTimeOffset]$usagePausedUntil).ToString("o")
+                reason = $usagePauseReason
+                matched_text = $usagePauseMatchedText
+                fallback_used = [bool]$usagePauseFallbackUsed
+                prompts_sent = $sentPrompts
+                session_id = $SessionId
+            }
+            Write-Host "Usage pause ended. Resumed Continuum watching."
+            $usagePausedUntil = $null
+            $usagePauseReason = ""
+            $usagePauseMatchedText = ""
+            $usagePauseFallbackUsed = $false
+        }
+
+        $usagePause = Get-UsagePauseState -Text ([string]$status.Text) -Now $now
+        if ([bool]$usagePause.Detected -and $null -ne $usagePause.PauseUntil -and ([DateTimeOffset]$usagePause.PauseUntil) -gt $now) {
+            $usagePausedUntil = [DateTimeOffset]$usagePause.PauseUntil
+            $usagePauseReason = [string]$usagePause.Reason
+            $usagePauseMatchedText = [string]$usagePause.MatchedText
+            $usagePauseFallbackUsed = [bool]$usagePause.FallbackUsed
+            $remainingSeconds = [int][Math]::Max(0, [Math]::Ceiling((([DateTimeOffset]$usagePausedUntil) - $now).TotalSeconds))
+
+            Write-Receipt -Event "codex_live_continue.usage_paused" -Data @{
+                handle = $handleId
+                pause_until = ([DateTimeOffset]$usagePausedUntil).ToString("o")
+                remaining_seconds = $remainingSeconds
+                reason = $usagePauseReason
+                matched_text = $usagePauseMatchedText
+                fallback_used = [bool]$usagePauseFallbackUsed
+                prompts_sent = $sentPrompts
+                session_id = $SessionId
+            }
+            Write-Host "Paused Continuum because Codex reported a usage limit. Waiting until $(([DateTimeOffset]$usagePausedUntil).ToString("o"))."
+            Start-Sleep -Milliseconds $PollMilliseconds
+            continue
         }
     }
 

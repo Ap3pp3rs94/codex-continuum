@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1
+
+- Added usage-limit pause detection for live Codex reset warnings.
+- Added `usage_paused` and `usage_resumed` receipts.
+- Added status reporting for active usage pauses with remaining reset time.
+
 ## 0.2.0
 
 - Added root entrypoint commands: `start`, `stop`, `status`, and `update`.

@@ -21,6 +21,35 @@ By default, Continuum also sends one prompt if the selected live session is
 already idle when the watcher starts. Use `-RequireObservedWorkingBeforeFirstPrompt`
 to wait for a fresh `Working` state before the first continuation.
 
+## Usage-Limit Pause
+
+Continuum watches the captured live-session text for Codex usage-limit,
+rate-limit, quota, and reset warnings. When it sees one, it stops sending
+`continue`, writes a `codex_live_continue.usage_paused` receipt, and waits until
+the reset time it can parse. It recognizes relative warnings such as
+`try again in 30 minutes`, clock warnings such as `resets at 3:00 PM`, and ISO
+timestamps.
+
+If a warning does not include a reset time, Continuum pauses for one hour by
+default:
+
+```powershell
+-UsagePauseFallbackSeconds 3600
+```
+
+Set a different fallback:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" start -ProjectName "<ProjectName>" -UsagePauseFallbackSeconds 7200
+```
+
+Disable the guard only when you explicitly want Continuum to keep trying through
+usage warnings:
+
+```powershell
+-DisableUsageLimitPause
+```
+
 ## Bounded Run
 
 ```powershell
@@ -70,7 +99,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plu
 Update to a specific release:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" update -Version 0.2.0
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" update -Version 0.2.1
 ```
 
 If you are inside a git checkout, use `git pull` instead. The updater refuses
@@ -99,7 +128,7 @@ If your terminal title does not use the default Codex spinner prefix, override
 Download the release zip into the Codex plugin folder:
 
 ```powershell
-$version = "0.2.0"
+$version = "0.2.1"
 $zip = Join-Path $env:TEMP "codex-continuum-plugin-v$version.zip"
 Invoke-WebRequest -Uri "https://github.com/Ap3pp3rs94/codex-continuum/releases/download/v$version/codex-continuum-plugin-v$version.zip" -OutFile $zip
 Expand-Archive -Path $zip -DestinationPath "$env:USERPROFILE\.codex\plugins" -Force

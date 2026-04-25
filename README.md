@@ -22,6 +22,8 @@ transcript replay.
   submit.
 - Retries foreground activation before typing, then keeps watching if Windows
   blocks one focus handoff.
+- Pauses instead of continuing if Codex shows a usage-limit or rate-limit reset
+  warning, then resumes after the reset time it can parse.
 - Writes JSONL receipts for attach, status, prompt, and stop events.
 - Provides `start`, `stop`, `status`, and `update` commands from one entrypoint.
 - Runs until Ctrl+C by default.
@@ -63,6 +65,11 @@ Check watcher health:
 powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" status
 ```
 
+If a usage warning appears, Continuum records a `usage_paused` receipt and stops
+sending `continue` until the reset time. If the warning does not include a time,
+the default pause is one hour. Override with `-UsagePauseFallbackSeconds`, or
+disable the guard with `-DisableUsageLimitPause`.
+
 Stop running Continuum watchers:
 
 ```powershell
@@ -80,7 +87,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plu
 From the latest GitHub release:
 
 ```powershell
-$version = "0.2.0"
+$version = "0.2.1"
 $zip = Join-Path $env:TEMP "codex-continuum-plugin-v$version.zip"
 Invoke-WebRequest -Uri "https://github.com/Ap3pp3rs94/codex-continuum/releases/download/v$version/codex-continuum-plugin-v$version.zip" -OutFile $zip
 Expand-Archive -Path $zip -DestinationPath "$env:USERPROFILE\.codex\plugins" -Force

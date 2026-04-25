@@ -22,6 +22,11 @@ param(
 
     [string]$TitleWorkingPattern = "(^|:\s*)[\u280b\u2819\u2839\u2838\u283c\u2834\u2826\u2827\u2807\u280f]\s+",
 
+    [string]$UsageWarningPattern = "(?i)(usage limit|rate limit|limit reached|usage capped|quota|try again.*(?:at|in)|resets?\s+(?:at|in)|reset\s+(?:at|in|time))",
+
+    [ValidateRange(0, 604800)]
+    [int]$UsagePauseFallbackSeconds = 3600,
+
     [ValidateRange(100, 10000)]
     [int]$PollMilliseconds = 750,
 
@@ -55,7 +60,9 @@ param(
 
     [switch]$VerboseStatusText,
 
-    [switch]$PauseWhenTargetNotForeground
+    [switch]$PauseWhenTargetNotForeground,
+
+    [switch]$DisableUsageLimitPause
 )
 
 Set-StrictMode -Version 2
@@ -218,6 +225,8 @@ $watcherParameters = @{
     Prompt = $Prompt
     StatusPattern = $StatusPattern
     TitleWorkingPattern = $TitleWorkingPattern
+    UsageWarningPattern = $UsageWarningPattern
+    UsagePauseFallbackSeconds = $UsagePauseFallbackSeconds
     PollMilliseconds = $PollMilliseconds
     StableClearMilliseconds = $StableClearMilliseconds
     SubmitConfirmMilliseconds = $SubmitConfirmMilliseconds
@@ -265,6 +274,10 @@ if ($VerboseStatusText) {
 
 if ($PauseWhenTargetNotForeground) {
     $watcherParameters.PauseWhenTargetNotForeground = $true
+}
+
+if ($DisableUsageLimitPause) {
+    $watcherParameters.DisableUsageLimitPause = $true
 }
 
 if ($WhatIfPreference) {
