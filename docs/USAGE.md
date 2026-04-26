@@ -17,6 +17,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plu
 If you paste a child Codex PID, Continuum resolves it back to the owning visible
 Codex PowerShell window when that process is still alive.
 
+If the PID is not visible to `Get-Process` or `Win32_Process`, Continuum cannot
+attach to it. Use one of the visible candidates instead.
+
 ## Run Until Ctrl+C
 
 ```powershell
@@ -41,6 +44,19 @@ Continuum waits for five continuous seconds of idle state before it types
 ```powershell
 -StableClearMilliseconds 5000
 ```
+
+## Guarded Approval-Safe Run
+
+This is the recommended form when you want Continuum to handle Codex numbered
+approval prompts and never type `continue` into a menu:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" start -TargetProcessId <visible-pwsh-pid> -SessionId "<session-id>" -StatusPattern '(?!)' -StableClearMilliseconds 5000 -AutoSelectApprovalChoice -ApprovalChoice 1 -DoNotAskAgainApprovalChoice 2 -RequireObservedWorkingBeforeFirstPrompt
+```
+
+Use this mode when bottom `Working` text is stale or unreliable. The
+`-StatusPattern '(?!)'` argument disables bottom-status matching for the run, so
+work detection relies on the Codex title spinner.
 
 ## Usage-Limit Pause
 
@@ -122,7 +138,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plu
 
 The status report is read-only. It summarizes receipts, watcher processes, the
 target process, last working signal, last prompt, last approval choice, prompt
-counts, and stale idle conditions.
+counts, interactive prompt blocks, usage pauses, and stale idle conditions.
 
 ## Stop
 

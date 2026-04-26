@@ -11,13 +11,15 @@ Codex Continuum is a live-window watcher.
    and read the live PowerShell window title.
 3. If enabled, detect numbered Codex approval menus and send the configured
    choice with a receipt.
-4. Watch for bottom `Working` text or the Codex spinner title, or treat the
+4. If an interactive prompt is visible but no approval choice was sent, write a
+   block receipt and skip continuation for that poll.
+5. Watch for bottom `Working` text or the Codex spinner title, or treat the
    startup state as eligible if the session is already idle.
-5. Wait until idle remains stable for five seconds.
-6. Bring the same target window foreground with a Win32 activation retry path.
-7. Clear console selection mode with Escape, then type `continue`.
-8. Submit and confirm the status returns to active work by text or title signal.
-9. Write a receipt.
+6. Wait until idle remains stable for five seconds.
+7. Bring the same target window foreground with a Win32 activation retry path.
+8. Clear console selection mode with Escape, then type `continue`.
+9. Submit and confirm the status returns to active work by text or title signal.
+10. Write a receipt.
 
 ## Why UI Automation
 
@@ -75,6 +77,20 @@ approval choice is sent, the watcher writes
 `codex_live_continue.interactive_prompt_blocked` and skips the normal
 `continue` branch for that poll. This keeps unrecognized menus from receiving
 free-form continuation text.
+
+Status treats a prompt block as active only while the target is idle and no
+newer attach, prompt, approval choice, or stop receipt has superseded it. That
+keeps old prompt-block receipts available for audit without leaving status stuck
+in a paused state after the operator clears the menu or restarts the watcher.
+
+## Guarded Title-Signal Runs
+
+Some Codex terminals leave stale bottom `Working` text visible after the session
+has stopped. For those windows, use `-StatusPattern '(?!)'` to disable
+bottom-status matching and rely on the Codex spinner in the PowerShell title.
+Pair it with `-RequireObservedWorkingBeforeFirstPrompt` when restarting around
+an existing prompt, so Continuum waits for a fresh work cycle before sending the
+first `continue`.
 
 ## Startup Intake
 

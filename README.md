@@ -57,6 +57,17 @@ Scripted starts can still pass the target and session id up front:
 powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" start -TargetProcessId <pid> -SessionId "<session-id>"
 ```
 
+Use the guarded approval-safe run when Continuum should handle Codex numbered
+permission menus and avoid startup idle prompts:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" start -TargetProcessId <visible-pwsh-pid> -SessionId "<session-id>" -StatusPattern '(?!)' -StableClearMilliseconds 5000 -AutoSelectApprovalChoice -ApprovalChoice 1 -DoNotAskAgainApprovalChoice 2 -RequireObservedWorkingBeforeFirstPrompt
+```
+
+`-TargetProcessId` should be the visible Codex PowerShell PID. If you provide a
+live child Codex PID, the launcher resolves it to the owning visible PowerShell
+window. If Windows cannot see that PID, choose a PID from `-ListCandidates`.
+
 Use `-NonInteractive` only for automation that intentionally wants the old
 argument-only behavior:
 
@@ -155,6 +166,17 @@ Use the status command to turn those receipts into a health summary:
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" status -Json
 ```
+
+Important receipt events:
+
+- `codex_live_continue.attached`
+- `codex_live_continue.status`
+- `codex_live_continue.prompt`
+- `codex_live_continue.approval_choice`
+- `codex_live_continue.interactive_prompt_blocked`
+- `codex_live_continue.usage_paused`
+- `codex_live_continue.usage_resumed`
+- `codex_live_continue.stop_requested`
 
 ## Boundaries
 

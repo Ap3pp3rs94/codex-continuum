@@ -35,6 +35,32 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plu
 
 Then run with `-TargetProcessId <pid>` instead of `-ProjectName`.
 
+If a pasted PID does not appear in `Get-Process` or `Win32_Process`, Windows
+cannot attach Continuum to it. Pick the visible Codex PowerShell PID from the
+candidate list. When a live child Codex PID is provided, the launcher resolves
+it to the owning visible PowerShell window.
+
+## It Types Continue Into A Menu
+
+Use the current build and restart with the guarded approval-safe flags:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" start -TargetProcessId <visible-pwsh-pid> -SessionId "<session-id>" -StatusPattern '(?!)' -StableClearMilliseconds 5000 -AutoSelectApprovalChoice -ApprovalChoice 1 -DoNotAskAgainApprovalChoice 2 -RequireObservedWorkingBeforeFirstPrompt
+```
+
+A protected run should either write `codex_live_continue.approval_choice` or
+`codex_live_continue.interactive_prompt_blocked`. The block receipt must include
+`prompts_sent`; if it stays `0`, Continuum saw the menu and did not type
+`continue` into it.
+
+Check status:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" status -Json
+```
+
+Look at `LastApprovalChoice` and `LastInteractivePromptBlock`.
+
 ## I Need To Stop It
 
 Run:
