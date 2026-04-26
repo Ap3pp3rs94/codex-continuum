@@ -707,30 +707,10 @@ function Get-ApprovalPromptMatch {
         }
     }
 
-    $titleLooksSelect = (-not [string]::IsNullOrWhiteSpace($Title)) -and ($Title -match "(?i)^Select\b")
     $approvalTailLines = [Math]::Min(50, [Math]::Max($TailLines, 30))
     $scanText = if ([string]::IsNullOrWhiteSpace($Text)) { "" } else { Select-TailText -Text $Text -LineCount $approvalTailLines }
     $numberedChoices = [regex]::Matches($scanText, "(?m)^\s*[1-9][\.)]\s+\S")
     if ($numberedChoices.Count -lt 2 -or $scanText -notmatch $ApprovalPromptPattern) {
-        if ($titleLooksSelect) {
-            $context = $scanText
-            if ([string]::IsNullOrWhiteSpace($context)) {
-                $context = $Title
-            }
-
-            if ($context.Length -gt 1000) {
-                $context = $context.Substring(0, 1000)
-            }
-
-            return [pscustomobject]@{
-                Detected = $true
-                Context = $context
-                Choice = $DoNotAskAgainApprovalChoice
-                ChoiceReason = "select_title_fallback"
-                ScanScope = $ScanScope
-            }
-        }
-
         return [pscustomobject]@{
             Detected = $false
             Context = ""

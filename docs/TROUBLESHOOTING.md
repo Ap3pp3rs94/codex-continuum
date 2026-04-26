@@ -54,8 +54,8 @@ A protected run should either write `codex_live_continue.approval_choice` or
 `continue` into it.
 
 If the prompt title starts with `Select` but the numbered menu text is not
-available to UI Automation, current builds choose `2` and write
-`choice_reason: select_title_fallback`.
+available to UI Automation, current builds block instead of guessing. Look for
+`codex_live_continue.interactive_prompt_blocked`.
 
 Check status:
 
