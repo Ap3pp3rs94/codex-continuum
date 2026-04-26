@@ -57,6 +57,9 @@ param(
     [ValidateRange(0, 1000000)]
     [int]$MaxPrompts = 0,
 
+    [ValidateRange(0, 100)]
+    [int]$MaxFailedSubmitAttempts = 3,
+
     [ValidateRange(0, 60)]
     [int]$AttachDelaySeconds = 0,
 
@@ -64,6 +67,8 @@ param(
     [int]$TimeoutSeconds = 0,
 
     [string]$ReceiptPath = "",
+
+    [string]$KillFlagPath = "",
 
     [switch]$ProbeOnly,
 
@@ -371,6 +376,7 @@ $watcherParameters = @{
     SubmitConfirmMilliseconds = $SubmitConfirmMilliseconds
     CooldownSeconds = $CooldownSeconds
     MaxPrompts = $MaxPrompts
+    MaxFailedSubmitAttempts = $MaxFailedSubmitAttempts
     AttachDelaySeconds = $AttachDelaySeconds
     TimeoutSeconds = $TimeoutSeconds
 }
@@ -393,6 +399,10 @@ if (-not [string]::IsNullOrWhiteSpace($SessionId)) {
 
 if (-not [string]::IsNullOrWhiteSpace($ReceiptPath)) {
     $watcherParameters.ReceiptPath = $ReceiptPath
+}
+
+if (-not [string]::IsNullOrWhiteSpace($KillFlagPath)) {
+    $watcherParameters.KillFlagPath = $KillFlagPath
 }
 
 if ($ProbeOnly) {

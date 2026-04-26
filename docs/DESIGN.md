@@ -19,13 +19,23 @@ Codex Continuum is a live-window watcher.
 7. Bring the same target window foreground with a Win32 activation retry path.
 8. Clear console selection mode with Escape, then type `continue`.
 9. Submit and confirm the status returns to active work by text or title signal.
-10. Write a receipt.
+10. Stop after repeated failed or unconfirmed submit attempts.
+11. Write a receipt.
 
 ## Why UI Automation
 
 The visible Codex TUI is the source of truth for this package. Backend resume or
 session logs can prove a session exists, but they do not continue the currently
 focused chat. Continuum acts on the live operator surface.
+
+## Why Not Background Autonomy
+
+Continuum does not own a work queue, mutate files directly, or decide what work
+Codex should do next. It uses the same visible session a human operator selected
+and only sends the configured continuation prompt or bounded approval choice.
+That keeps the trust boundary local and inspectable: when the target window is
+gone, the prompt is ambiguous, the usage limit is active, or submit confirmation
+fails repeatedly, the watcher stops or pauses and writes receipts.
 
 ## Submit Fallback
 
@@ -42,6 +52,10 @@ SendKeys "{ENTER}"
 After each submit attempt, it waits for `Working` text or a Codex spinner title.
 Receipts record the method and signal that confirmed, or record `unconfirmed` if
 no method produced a visible status transition.
+
+Unconfirmed submit attempts increment `consecutive_failed_submit_attempts`. The
+watcher stops with `repeated_failed_submit` when the count reaches
+`-MaxFailedSubmitAttempts` unless that setting is `0`.
 
 ## Foreground Activation
 
@@ -82,6 +96,27 @@ Status treats a prompt block as active only while the target is idle and no
 newer attach, prompt, approval choice, or stop receipt has superseded it. That
 keeps old prompt-block receipts available for audit without leaving status stuck
 in a paused state after the operator clears the menu or restarts the watcher.
+
+## Stop And Pause Conditions
+
+Hard stops:
+
+- `window_closed`: the attached live window no longer exists.
+- `focus_lost`: focus left the target and `-ExitOnFocusLoss` was set.
+- `repeated_failed_submit`: failed or unconfirmed submits reached the configured
+  threshold.
+- `kill_flag`: the configured kill-flag file exists.
+- `timeout` / `max_prompts`: bounded run limit reached.
+- `ctrl_c_or_process_exit`: operator interrupted the watcher or the host exited.
+
+Pauses:
+
+- `usage_paused`: a usage-limit, rate-limit, quota, or reset warning was
+  detected.
+- `interactive_prompt_blocked`: a visible prompt looked interactive but was not
+  safely selectable.
+- `focus_lost` with `-PauseWhenTargetNotForeground`: focus left the target and
+  the run was configured to pause rather than continue in the background.
 
 ## Guarded Title-Signal Runs
 

@@ -44,6 +44,9 @@ param(
     [ValidateRange(0, 1000000)]
     [int]$MaxPrompts = 0,
 
+    [ValidateRange(0, 100)]
+    [int]$MaxFailedSubmitAttempts = 3,
+
     [ValidateRange(0, 60)]
     [int]$AttachDelaySeconds = 5,
 
@@ -67,6 +70,8 @@ param(
     [string]$SessionId = "",
 
     [string]$ReceiptPath = "",
+
+    [string]$KillFlagPath = "",
 
     [switch]$AllowFullWindowFallback,
 
@@ -98,6 +103,13 @@ $receiptPath = if ([string]::IsNullOrWhiteSpace($ReceiptPath)) {
 }
 else {
     $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ReceiptPath)
+}
+
+$killFlagPath = if ([string]::IsNullOrWhiteSpace($KillFlagPath)) {
+    Join-Path (Split-Path -Parent $receiptPath) "codex-live-continue.kill"
+}
+else {
+    $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($KillFlagPath)
 }
 
 Add-Type -AssemblyName UIAutomationClient
@@ -987,6 +999,7 @@ Write-Receipt -Event "codex_live_continue.attached" -Data @{
     stable_clear_ms = $StableClearMilliseconds
     submit_confirm_ms = $SubmitConfirmMilliseconds
     cooldown_s = $CooldownSeconds
+    max_failed_submit_attempts = $MaxFailedSubmitAttempts
     attach_delay_s = $AttachDelaySeconds
     target_process_id = $TargetProcessId
     target_window_handle = $TargetWindowHandle
@@ -1005,6 +1018,7 @@ Write-Receipt -Event "codex_live_continue.attached" -Data @{
     timeout_s = $TimeoutSeconds
     window_title_pattern = $WindowTitlePattern
     session_id = $SessionId
+    kill_flag_path = $killFlagPath
     allow_full_window_fallback = [bool]$AllowFullWindowFallback
     require_observed_working_before_first_prompt = [bool]$RequireObservedWorkingBeforeFirstPrompt
     probe_only = [bool]$ProbeOnly
@@ -1047,6 +1061,7 @@ $clearSince = $null
 $lastPromptAt = (Get-Date).AddSeconds(-1 * ($CooldownSeconds + 1))
 $sentPrompts = 0
 $promptAttempts = 0
+$consecutiveFailedSubmitAttempts = 0
 $lastApprovalChoiceAt = (Get-Date).AddSeconds(-1 * ($ApprovalChoiceCooldownSeconds + 1))
 $approvalChoicesSent = 0
 $approvalChoiceAttempts = 0
@@ -1062,6 +1077,12 @@ $stopReason = "ctrl_c_or_process_exit"
 
 try {
 while ($MaxPrompts -eq 0 -or $sentPrompts -lt $MaxPrompts) {
+    if (Test-Path -LiteralPath $killFlagPath) {
+        $stopReason = "kill_flag"
+        Write-Host "Stopped because kill flag exists at $killFlagPath. Prompts sent: $sentPrompts"
+        break
+    }
+
     if ($TimeoutSeconds -gt 0 -and ((Get-Date) - $startedAt).TotalSeconds -ge $TimeoutSeconds) {
         $stopReason = "timeout"
         Write-Host "Stopped after timeout. Prompts sent: $sentPrompts"
@@ -1325,6 +1346,7 @@ while ($MaxPrompts -eq 0 -or $sentPrompts -lt $MaxPrompts) {
             $lastPromptAt = Get-Date
             $confirmedWorkObserved = $sent -and ($inputMethod -match "-confirmed-")
             if ($confirmedWorkObserved) {
+                $consecutiveFailedSubmitAttempts = 0
                 $observedWorking = $true
                 $clearSince = $null
                 $lastObservedState = $true
@@ -1340,10 +1362,14 @@ while ($MaxPrompts -eq 0 -or $sentPrompts -lt $MaxPrompts) {
                 }
             }
             elseif ($sent -or $WhatIfPreference) {
+                if (-not $WhatIfPreference) {
+                    $consecutiveFailedSubmitAttempts += 1
+                }
                 $observedWorking = $false
                 $clearSince = $null
             }
             else {
+                $consecutiveFailedSubmitAttempts += 1
                 $observedWorking = $true
                 $clearSince = Get-Date
             }
@@ -1359,6 +1385,7 @@ while ($MaxPrompts -eq 0 -or $sentPrompts -lt $MaxPrompts) {
                 input_method = $inputMethod
                 error = $sendError
                 confirmed_work_observed = [bool]$confirmedWorkObserved
+                consecutive_failed_submit_attempts = $consecutiveFailedSubmitAttempts
             }
 
             if ($sent) {
@@ -1371,6 +1398,12 @@ while ($MaxPrompts -eq 0 -or $sentPrompts -lt $MaxPrompts) {
             else {
                 $limitLabel = if ($MaxPrompts -eq 0) { "unlimited" } else { [string]$MaxPrompts }
                 Write-Host "Would send live-session continuation prompt $sentPrompts/$limitLabel."
+            }
+
+            if ($MaxFailedSubmitAttempts -gt 0 -and $consecutiveFailedSubmitAttempts -ge $MaxFailedSubmitAttempts) {
+                $stopReason = "repeated_failed_submit"
+                Write-Host "Stopped after $consecutiveFailedSubmitAttempts failed or unconfirmed submit attempt(s). Prompts sent: $sentPrompts"
+                break
             }
         }
     }
@@ -1389,6 +1422,7 @@ Write-Receipt -Event "codex_live_continue.stopped" -Data @{
     reason = $stopReason
     prompts_sent = $sentPrompts
     prompt_attempts = $promptAttempts
+    consecutive_failed_submit_attempts = $consecutiveFailedSubmitAttempts
     approval_choices_sent = $approvalChoicesSent
     approval_choice_attempts = $approvalChoiceAttempts
     interactive_prompt_blocks = $interactivePromptBlocks

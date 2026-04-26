@@ -45,6 +45,14 @@ Continuum waits for five continuous seconds of idle state before it types
 -StableClearMilliseconds 5000
 ```
 
+Continuum stops after three failed or unconfirmed submit attempts by default:
+
+```powershell
+-MaxFailedSubmitAttempts 3
+```
+
+Set `-MaxFailedSubmitAttempts 0` only when you want to disable that stop guard.
+
 ## Guarded Approval-Safe Run
 
 This is the recommended form when you want Continuum to handle Codex numbered
@@ -85,6 +93,37 @@ usage warnings:
 
 ```powershell
 -DisableUsageLimitPause
+```
+
+## Stop And Pause Conditions
+
+Continuum distinguishes stop conditions from temporary pauses:
+
+- Usage-limit, rate-limit, quota, and reset warnings write
+  `codex_live_continue.usage_paused` and pause sends until the parsed reset
+  time or fallback pause expires.
+- Visible interactive prompts write
+  `codex_live_continue.interactive_prompt_blocked` and block `continue` until
+  the prompt clears or a safe approval choice is sent.
+- Closed target windows stop the watcher with `window_closed`.
+- `-ExitOnFocusLoss` stops the watcher with `focus_lost`; without that flag,
+  focus loss is not a hard stop.
+- Repeated failed or unconfirmed submits stop the watcher with
+  `repeated_failed_submit`.
+- Creating the kill flag stops the watcher with `kill_flag`.
+- `-TimeoutSeconds` and `-MaxPrompts` stop bounded runs with `timeout` or
+  `max_prompts`.
+
+Default kill flag:
+
+```text
+%USERPROFILE%\.codex\plugins\codex-continuum\data\operator\codex-live-continue.kill
+```
+
+Override it when a run needs a scoped stop file:
+
+```powershell
+-KillFlagPath "C:\Temp\codex-continuum.stop"
 ```
 
 ## Approval Choice Automation

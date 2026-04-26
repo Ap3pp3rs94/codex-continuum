@@ -365,6 +365,7 @@ function Get-ContinuumSummary {
             Sent = [bool]$lastPromptSent
             PromptCount = [int](Get-PropertyValue -Object $lastPrompt -Name "prompt_count" -Default 0)
             PromptAttempts = [int](Get-PropertyValue -Object $lastPrompt -Name "prompt_attempts" -Default 0)
+            ConsecutiveFailedSubmitAttempts = [int](Get-PropertyValue -Object $lastPrompt -Name "consecutive_failed_submit_attempts" -Default 0)
             InputMethod = [string](Get-PropertyValue -Object $lastPrompt -Name "input_method" -Default "")
             ConfirmedWorkObserved = Convert-ToBoolean (Get-PropertyValue -Object $lastPrompt -Name "confirmed_work_observed" -Default $false)
             Error = $lastPromptError

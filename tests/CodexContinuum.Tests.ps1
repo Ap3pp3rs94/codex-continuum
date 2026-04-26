@@ -27,6 +27,11 @@ Describe "Codex Continuum package" {
             "ForceForegroundWindow",
             "Set-LiveSessionForeground",
             "prompt_attempts",
+            "MaxFailedSubmitAttempts",
+            "consecutive_failed_submit_attempts",
+            "repeated_failed_submit",
+            "KillFlagPath",
+            "kill_flag",
             "confirmed_work_observed",
             "send_confirmation",
             "RequireObservedWorkingBeforeFirstPrompt",
@@ -108,6 +113,8 @@ Describe "Codex Continuum package" {
             "Target visible Codex PowerShell PID",
             "Session/thread id",
             "NonInteractive",
+            "MaxFailedSubmitAttempts",
+            "KillFlagPath",
             "AutoSelectApprovalChoice",
             "ApprovalChoice",
             "DoNotAskAgainApprovalChoice",
@@ -155,6 +162,7 @@ Describe "Codex Continuum package" {
                 sent = $true
                 prompt_count = 1
                 prompt_attempts = 1
+                consecutive_failed_submit_attempts = 1
                 input_method = "test-confirmed-title"
                 confirmed_work_observed = $true
                 error = ""
@@ -202,6 +210,10 @@ Describe "Codex Continuum package" {
 
             if ($summary.LastPrompt.PromptCount -ne 1) {
                 throw "Status did not report prompt count."
+            }
+
+            if ($summary.LastPrompt.ConsecutiveFailedSubmitAttempts -ne 1) {
+                throw "Status did not report failed submit attempts."
             }
 
             if ($summary.LastApprovalChoice.Choice -ne "2") {

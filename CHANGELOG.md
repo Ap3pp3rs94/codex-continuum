@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added a README safety model, stop/pause condition summary, background
+  autonomy boundary, and watcher screenshot asset.
+- Added `-MaxFailedSubmitAttempts` and `-KillFlagPath` so repeated submit
+  failures and kill files are real stop conditions, not just documentation.
 - Expanded README and operator docs for guarded approval-safe runs, visible PID
   attachment, interactive prompt block receipts, and title-signal restart
   guidance.

@@ -134,3 +134,29 @@ If the watcher attached while Codex was already idle, make sure you are on the
 current build. The default now sends once on stable startup idle. Only pass
 `-RequireObservedWorkingBeforeFirstPrompt` when you explicitly want to suppress
 that first idle kick.
+
+## It Stopped After Failed Submits
+
+If `status -Json` shows `LastStopped.Reason` as `repeated_failed_submit`, the
+watcher reached `-MaxFailedSubmitAttempts` without seeing Codex return to active
+work after submit. Check `LastPrompt.InputMethod`,
+`LastPrompt.ConfirmedWorkObserved`, and
+`LastPrompt.ConsecutiveFailedSubmitAttempts`.
+
+Raise the threshold only after confirming the target window and title/status
+signals are reliable:
+
+```powershell
+-MaxFailedSubmitAttempts 5
+```
+
+Use `-MaxFailedSubmitAttempts 0` to disable the guard.
+
+## Kill Flag Stopped The Watcher
+
+If `LastStopped.Reason` is `kill_flag`, remove the configured kill-flag file
+before restarting. The default path is:
+
+```text
+%USERPROFILE%\.codex\plugins\codex-continuum\data\operator\codex-live-continue.kill
+```

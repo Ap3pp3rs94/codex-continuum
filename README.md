@@ -9,6 +9,36 @@ types `continue` and submits it in the same window. It is built for the visible
 session you are already using, not for hidden backend resume or archived
 transcript replay.
 
+![Codex Continuum watcher console](docs/assets/continuum-watching.png)
+
+## Safety Model
+
+Codex Continuum is a visible-session tool, not an autonomous background agent.
+Its authority boundary is the Codex PowerShell window selected by the operator.
+It does not inspect every Codex process, does not replay archived sessions, and
+does not continue hidden chats. It only types into the attached live window, then
+writes receipts that show what it saw and what it sent.
+
+The default safety posture is fail-closed:
+
+- Attach to one visible Codex PowerShell window by PID, window handle, or
+  explicit project match.
+- Resolve live child Codex PIDs back to the owning visible PowerShell window.
+- Wait for a stable idle signal before typing `continue`.
+- Pause on usage-limit or rate-limit reset warnings instead of spamming
+  retries.
+- Block on unrecognized interactive prompts instead of typing `continue` into a
+  numbered menu.
+- Stop after repeated failed or unconfirmed submit attempts.
+- Stop when the attached window closes, the timeout/max-prompt limit is reached,
+  Ctrl+C is pressed, or the kill-flag file appears.
+
+Default kill flag:
+
+```text
+%USERPROFILE%\.codex\plugins\codex-continuum\data\operator\codex-live-continue.kill
+```
+
 ## What It Does
 
 - Targets any live Codex project window by `-ProjectName`, process id, or window
@@ -31,6 +61,9 @@ transcript replay.
 - Fails closed on visible interactive prompts: if an approval-style prompt is
   suspected but not selected, Continuum writes an `interactive_prompt_blocked`
   receipt and does not type `continue` into the menu.
+- Stops after repeated failed or unconfirmed submit attempts, configurable with
+  `-MaxFailedSubmitAttempts`.
+- Stops when a kill-flag file exists, configurable with `-KillFlagPath`.
 - Writes JSONL receipts for attach, status, prompt, and stop events.
 - Provides `start`, `stop`, `status`, and `update` commands from one entrypoint.
 - Runs until Ctrl+C by default.
@@ -89,6 +122,19 @@ If you do not want the startup idle kick, add
 Continuum waits five continuous seconds after work clears before typing
 `continue`; tune with `-StableClearMilliseconds` only when status detection is
 reliably stable.
+
+Stop or pause behavior:
+
+- `usage_paused`: usage-limit, rate-limit, quota, or reset warning detected;
+  sends pause until the parsed reset time or fallback pause expires.
+- `interactive_prompt_blocked`: visible approval/menu prompt was detected but
+  not safely selected; sends pause until the prompt clears.
+- `window_closed`: attached live window no longer exists; watcher stops.
+- `focus_lost`: watcher stops only when `-ExitOnFocusLoss` is set.
+- `repeated_failed_submit`: failed or unconfirmed submits reached
+  `-MaxFailedSubmitAttempts`.
+- `kill_flag`: `-KillFlagPath` exists.
+- `timeout` / `max_prompts`: bounded run limit reached.
 
 Check watcher health:
 
@@ -183,6 +229,27 @@ Important receipt events:
 Codex Continuum is intentionally narrow. It does not call private Codex APIs,
 does not read archived sessions, and does not claim background autonomy. It
 drives the same local UI a human operator would use, with receipts.
+
+## Why Not Background Autonomy?
+
+Background autonomy would require a different trust model: queue ownership,
+policy gates, workspace mutation authority, error recovery, and audit trails
+outside the visible operator session. Continuum deliberately does not take that
+role. It handles one painful seam: keeping a visible Codex session moving when
+the operator already chose that session and can still see the result.
+
+That boundary keeps the tool simple to inspect. If it types, the selected
+window receives keystrokes. If it pauses or stops, the receipt log explains why.
+If the target window disappears or the prompt becomes ambiguous, it stops or
+blocks instead of guessing.
+
+## Francis Case Study
+
+A later case study should document the Francis overnight continuation workflow:
+100+ roadmap-governed Codex commits with visible-session continuation, receipt
+checks, guarded permission prompts, and explicit stop conditions. Keep that as a
+case study, not a product claim, until the exact run receipts and commit range
+are published.
 
 More detail:
 
