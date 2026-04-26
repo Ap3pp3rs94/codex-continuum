@@ -105,6 +105,11 @@ approval selector does not send a choice, Continuum fails closed: it writes a
 `continue` into the prompt. This also protects prompt menus when approval
 selection is disabled.
 
+When Codex puts the terminal title in a `Select ...` state but hides the actual
+numbered menu text from UI Automation, `-AutoSelectApprovalChoice` uses the
+no-ask-again choice (`2` by default) as a bounded fallback and records
+`choice_reason: select_title_fallback`.
+
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" start -TargetProcessId <pid> -SessionId "<session-id>" -AutoSelectApprovalChoice
 ```

@@ -5,6 +5,8 @@
 - Expanded README and operator docs for guarded approval-safe runs, visible PID
   attachment, interactive prompt block receipts, and title-signal restart
   guidance.
+- Added a `Select`-title approval fallback that chooses the no-ask-again option
+  when Codex hides the numbered menu text from UI Automation.
 - Added explicit startup prompts for target PID and session/thread id before
   Continuum attaches.
 - Added `-NonInteractive` for scripted starts that should keep argument-only

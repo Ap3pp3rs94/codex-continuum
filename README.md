@@ -31,6 +31,8 @@ transcript replay.
 - Fails closed on visible interactive prompts: if an approval-style prompt is
   suspected but not selected, Continuum writes an `interactive_prompt_blocked`
   receipt and does not type `continue` into the menu.
+- Falls back to approval choice `2` when Codex exposes a `Select` prompt title
+  but hides the numbered approval text from UI Automation.
 - Writes JSONL receipts for attach, status, prompt, and stop events.
 - Provides `start`, `stop`, `status`, and `update` commands from one entrypoint.
 - Runs until Ctrl+C by default.

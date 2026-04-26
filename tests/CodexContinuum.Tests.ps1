@@ -42,6 +42,7 @@ Describe "Codex Continuum package" {
             "would you like to run",
             "DoNotAskAgainApprovalPattern",
             "DoNotAskAgainApprovalChoice",
+            "select_title_fallback",
             "FullWindow",
             "full_window_tail",
             "not_scanned_working",

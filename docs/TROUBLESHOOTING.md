@@ -53,6 +53,10 @@ A protected run should either write `codex_live_continue.approval_choice` or
 `prompts_sent`; if it stays `0`, Continuum saw the menu and did not type
 `continue` into it.
 
+If the prompt title starts with `Select` but the numbered menu text is not
+available to UI Automation, current builds choose `2` and write
+`choice_reason: select_title_fallback`.
+
 Check status:
 
 ```powershell
