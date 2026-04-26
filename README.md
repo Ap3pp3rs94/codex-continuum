@@ -17,35 +17,51 @@ transcript replay.
 - Types `continue`, submits it, and confirms Codex returns to active work by
   bottom status text or title spinner.
 - Sends once on startup idle, so attaching after Codex has already finished
-  still continues the session.
+  still continues the session after a stable idle delay.
 - Falls back across multiple submit keys if one Enter path types but does not
   submit.
 - Retries foreground activation before typing, then keeps watching if Windows
   blocks one focus handoff.
 - Pauses instead of continuing if Codex shows a usage-limit or rate-limit reset
   warning, then resumes after the reset time it can parse.
+- Can opt in to selecting choice `1` on numbered Codex approval prompts, or
+  choice `2` when the prompt says not to ask again, with an approval-choice
+  receipt for audit. Approval detection scans the visible full-window tail only
+  while Codex is not working.
+- Fails closed on visible interactive prompts: if an approval-style prompt is
+  suspected but not selected, Continuum writes an `interactive_prompt_blocked`
+  receipt and does not type `continue` into the menu.
 - Writes JSONL receipts for attach, status, prompt, and stop events.
 - Provides `start`, `stop`, `status`, and `update` commands from one entrypoint.
 - Runs until Ctrl+C by default.
 
 ## Quick Start
 
-List live Codex windows:
+Start Continuum. It lists live Codex PowerShell windows, prompts for the target
+PID, prompts for the session/thread id, then begins after you submit both
+values:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" start
+```
+
+List live Codex windows without starting:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" -ListCandidates
 ```
 
-Start Continuum for any project name shown in the Codex window title:
+Scripted starts can still pass the target and session id up front:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" start -ProjectName "<ProjectName>" -SessionId "<session-id>"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" start -TargetProcessId <pid> -SessionId "<session-id>"
 ```
 
-Start by PID when multiple windows have similar titles:
+Use `-NonInteractive` only for automation that intentionally wants the old
+argument-only behavior:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" -TargetProcessId <pid> -SessionId "<session-id>"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" start -ProjectName "<ProjectName>" -SessionId "<session-id>" -NonInteractive
 ```
 
 Probe before running:
@@ -59,6 +75,10 @@ Stop it with Ctrl+C in the watcher PowerShell window.
 If you do not want the startup idle kick, add
 `-RequireObservedWorkingBeforeFirstPrompt`.
 
+Continuum waits five continuous seconds after work clears before typing
+`continue`; tune with `-StableClearMilliseconds` only when status detection is
+reliably stable.
+
 Check watcher health:
 
 ```powershell
@@ -69,6 +89,14 @@ If a usage warning appears, Continuum records a `usage_paused` receipt and stops
 sending `continue` until the reset time. If the warning does not include a time,
 the default pause is one hour. Override with `-UsagePauseFallbackSeconds`, or
 disable the guard with `-DisableUsageLimitPause`.
+
+Auto-select approval prompts only when you intentionally want Continuum to pick
+choice `1` on numbered Codex approval menus, or choice `2` when the prompt says
+not to ask again:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" start -TargetProcessId <pid> -SessionId "<session-id>" -AutoSelectApprovalChoice
+```
 
 Stop running Continuum watchers:
 

@@ -24,6 +24,21 @@ param(
 
     [string]$UsageWarningPattern = "(?i)(usage limit|rate limit|limit reached|usage capped|quota|try again.*(?:at|in)|resets?\s+(?:at|in)|reset\s+(?:at|in|time))",
 
+    [string]$ApprovalPromptPattern = "(?is)(permission|approval|approve|allow|grant|sandbox|trust|would you like to run|run the following command|yes,\s*proceed|tell codex what to do differently|never ask|don't ask|dont ask|\byes\b|\bno\b)",
+
+    [string]$InteractivePromptBlockPattern = "(?ims)(would you like to|run the following command|yes,\s*proceed|do not ask again|don't ask again|dont ask again|tell codex what to do differently|^\s*[1-9][\.)]\s+\S)",
+
+    [ValidatePattern("^[1-9]$")]
+    [string]$ApprovalChoice = "1",
+
+    [string]$DoNotAskAgainApprovalPattern = "(?is)(do not ask again|don't ask again|dont ask again|never ask again)",
+
+    [ValidatePattern("^[1-9]$")]
+    [string]$DoNotAskAgainApprovalChoice = "2",
+
+    [ValidateRange(0, 3600)]
+    [int]$ApprovalChoiceCooldownSeconds = 5,
+
     [ValidateRange(0, 604800)]
     [int]$UsagePauseFallbackSeconds = 3600,
 
@@ -31,7 +46,7 @@ param(
     [int]$PollMilliseconds = 750,
 
     [ValidateRange(100, 30000)]
-    [int]$StableClearMilliseconds = 1200,
+    [int]$StableClearMilliseconds = 5000,
 
     [ValidateRange(500, 10000)]
     [int]$SubmitConfirmMilliseconds = 3500,
@@ -62,7 +77,11 @@ param(
 
     [switch]$PauseWhenTargetNotForeground,
 
-    [switch]$DisableUsageLimitPause
+    [switch]$AutoSelectApprovalChoice,
+
+    [switch]$DisableUsageLimitPause,
+
+    [switch]$NonInteractive
 )
 
 Set-StrictMode -Version 2
@@ -190,6 +209,91 @@ function Format-CandidateTable {
         Out-String
 }
 
+function Resolve-LiveCodexWindowCandidateFromProcessId {
+    param(
+        [Parameter(Mandatory = $true)]
+        [int]$ProcessId,
+
+        [Parameter(Mandatory = $true)]
+        [object[]]$Candidates
+    )
+
+    $candidateById = @{}
+    foreach ($candidate in $Candidates) {
+        $candidateById[[int]$candidate.ProcessId] = $candidate
+    }
+
+    $tree = Get-ProcessTreeByParent
+    $parentById = @{}
+    foreach ($row in $tree.Rows) {
+        $parentById[[int]$row.ProcessId] = [int]$row.ParentProcessId
+    }
+
+    $visited = @{}
+    $current = $ProcessId
+    while ($current -gt 0 -and -not $visited.ContainsKey($current)) {
+        $visited[$current] = $true
+        if ($candidateById.ContainsKey($current)) {
+            return $candidateById[$current]
+        }
+
+        if (-not $parentById.ContainsKey($current)) {
+            break
+        }
+
+        $current = [int]$parentById[$current]
+    }
+
+    return $null
+}
+
+function Read-InteractiveTargetProcessId {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object[]]$Candidates
+    )
+
+    if ($Candidates.Count -eq 0) {
+        throw "No live Codex PowerShell windows found. Start Codex in a visible PowerShell window first."
+    }
+
+    Write-Host "Live Codex PowerShell windows:"
+    Write-Host (Format-CandidateTable -Candidates $Candidates)
+
+    while ($true) {
+        $rawProcessId = (Read-Host "Target visible Codex PowerShell PID").Trim()
+        $parsedProcessId = 0
+        if (-not [int]::TryParse($rawProcessId, [ref]$parsedProcessId) -or $parsedProcessId -le 0) {
+            Write-Warning "Enter a positive numeric PID from the candidate list."
+            continue
+        }
+
+        $candidate = Resolve-LiveCodexWindowCandidateFromProcessId -ProcessId $parsedProcessId -Candidates $Candidates
+        if ($null -eq $candidate) {
+            Write-Warning "PID $parsedProcessId is not a live Codex PowerShell window or descendant. Choose one of the displayed target windows."
+            continue
+        }
+
+        $resolvedProcessId = [int]$candidate.ProcessId
+        if ($resolvedProcessId -ne $parsedProcessId) {
+            Write-Host "Resolved PID $parsedProcessId to visible Codex PowerShell PID $resolvedProcessId ($($candidate.Title))."
+        }
+
+        return $resolvedProcessId
+    }
+}
+
+function Read-InteractiveSessionId {
+    while ($true) {
+        $rawSessionId = (Read-Host "Session/thread id").Trim()
+        if (-not [string]::IsNullOrWhiteSpace($rawSessionId)) {
+            return $rawSessionId
+        }
+
+        Write-Warning "Session/thread id is required before Continuum starts."
+    }
+}
+
 if ($ListCandidates) {
     $candidates = @(Get-LiveCodexWindowCandidate)
     if ($candidates.Count -eq 0) {
@@ -199,6 +303,35 @@ if ($ListCandidates) {
 
     Write-Host (Format-CandidateTable -Candidates $candidates)
     return
+}
+
+if (-not $NonInteractive) {
+    $needsTargetPrompt = $TargetProcessId -eq 0 -and $TargetWindowHandle -eq 0
+    $needsSessionPrompt = [string]::IsNullOrWhiteSpace($SessionId)
+
+    if ($needsTargetPrompt -or $needsSessionPrompt) {
+        $candidates = @(Get-LiveCodexWindowCandidate)
+
+        if ($needsTargetPrompt) {
+            $TargetProcessId = Read-InteractiveTargetProcessId -Candidates $candidates
+        }
+
+        if ($needsSessionPrompt) {
+            $SessionId = Read-InteractiveSessionId
+        }
+    }
+}
+
+if ($TargetProcessId -gt 0 -and $TargetWindowHandle -eq 0) {
+    $candidates = @(Get-LiveCodexWindowCandidate)
+    $candidate = Resolve-LiveCodexWindowCandidateFromProcessId -ProcessId $TargetProcessId -Candidates $candidates
+    if ($null -ne $candidate) {
+        $resolvedProcessId = [int]$candidate.ProcessId
+        if ($resolvedProcessId -ne $TargetProcessId) {
+            Write-Host "Resolved PID $TargetProcessId to visible Codex PowerShell PID $resolvedProcessId ($($candidate.Title))."
+            $TargetProcessId = $resolvedProcessId
+        }
+    }
 }
 
 if ($TargetProcessId -eq 0 -and $TargetWindowHandle -eq 0) {
@@ -226,6 +359,12 @@ $watcherParameters = @{
     StatusPattern = $StatusPattern
     TitleWorkingPattern = $TitleWorkingPattern
     UsageWarningPattern = $UsageWarningPattern
+    ApprovalPromptPattern = $ApprovalPromptPattern
+    InteractivePromptBlockPattern = $InteractivePromptBlockPattern
+    ApprovalChoice = $ApprovalChoice
+    DoNotAskAgainApprovalPattern = $DoNotAskAgainApprovalPattern
+    DoNotAskAgainApprovalChoice = $DoNotAskAgainApprovalChoice
+    ApprovalChoiceCooldownSeconds = $ApprovalChoiceCooldownSeconds
     UsagePauseFallbackSeconds = $UsagePauseFallbackSeconds
     PollMilliseconds = $PollMilliseconds
     StableClearMilliseconds = $StableClearMilliseconds
@@ -274,6 +413,10 @@ if ($VerboseStatusText) {
 
 if ($PauseWhenTargetNotForeground) {
     $watcherParameters.PauseWhenTargetNotForeground = $true
+}
+
+if ($AutoSelectApprovalChoice) {
+    $watcherParameters.AutoSelectApprovalChoice = $true
 }
 
 if ($DisableUsageLimitPause) {

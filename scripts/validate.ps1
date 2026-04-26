@@ -42,9 +42,16 @@ if ($testText -match "\bShould\b") {
 }
 
 $watcher = Get-Content -LiteralPath (Join-Path $repoRoot "scripts\codex-live-continue.ps1") -Raw
-foreach ($required in @("SubmitConfirmMilliseconds", "sendkeys-tilde", "sendkeys-ctrl-m", "SendEnterKey", "SendEscapeKey", "-confirmed", "TitleWorkingPattern", "WorkingSignal", "ForceForegroundWindow", "Set-LiveSessionForeground", "prompt_attempts", "confirmed_work_observed", "send_confirmation", "RequireObservedWorkingBeforeFirstPrompt", "observedWorking = -not", "UsageWarningPattern", "UsagePauseFallbackSeconds", "Get-UsagePauseState", "codex_live_continue.usage_paused", "codex_live_continue.usage_resumed")) {
+foreach ($required in @("SubmitConfirmMilliseconds", "StableClearMilliseconds = 5000", "sendkeys-tilde", "sendkeys-ctrl-m", "SendEnterKey", "SendEscapeKey", "-confirmed", "TitleWorkingPattern", "WorkingSignal", "ForceForegroundWindow", "Set-LiveSessionForeground", "prompt_attempts", "confirmed_work_observed", "send_confirmation", "RequireObservedWorkingBeforeFirstPrompt", "observedWorking = -not", "UsageWarningPattern", "UsagePauseFallbackSeconds", "Get-UsagePauseState", "codex_live_continue.usage_paused", "codex_live_continue.usage_resumed", "AutoSelectApprovalChoice", "ApprovalPromptPattern", "InteractivePromptBlockPattern", "would you like to run", "DoNotAskAgainApprovalPattern", "DoNotAskAgainApprovalChoice", "FullWindow", "full_window_tail", "not_scanned_working", "Get-ApprovalPromptMatch", "Get-InteractivePromptBlock", "Send-ApprovalChoice", "codex_live_continue.approval_choice", "codex_live_continue.interactive_prompt_blocked")) {
     if ($watcher -notmatch [regex]::Escape($required)) {
         Add-Failure "Watcher missing required submit behavior: $required"
+    }
+}
+
+$launcher = Get-Content -LiteralPath (Join-Path $repoRoot "scripts\start-codex-continuum.ps1") -Raw
+foreach ($required in @("Read-InteractiveTargetProcessId", "Read-InteractiveSessionId", "Resolve-LiveCodexWindowCandidateFromProcessId", "Target visible Codex PowerShell PID", "Session/thread id", "NonInteractive", "AutoSelectApprovalChoice", "ApprovalChoice", "DoNotAskAgainApprovalChoice", "ApprovalPromptPattern", "InteractivePromptBlockPattern")) {
+    if ($launcher -notmatch [regex]::Escape($required)) {
+        Add-Failure "Launcher missing required startup intake: $required"
     }
 }
 
@@ -61,7 +68,7 @@ if (-not (Test-Path -LiteralPath $statusScriptPath)) {
 }
 else {
     $statusScript = Get-Content -LiteralPath $statusScriptPath -Raw
-    foreach ($required in @("Get-ContinuumSummary", "IdleStale", "LastPrompt", "Watcher", "Target", "ReceiptParseFailures", "UsagePause", "UsagePaused")) {
+    foreach ($required in @("Get-ContinuumSummary", "IdleStale", "InteractivePromptBlocked", "LastPrompt", "LastApprovalChoice", "LastInteractivePromptBlock", "ChoiceReason", "ScanScope", "Watcher", "Target", "ReceiptParseFailures", "UsagePause", "UsagePaused")) {
         if ($statusScript -notmatch [regex]::Escape($required)) {
             Add-Failure "Status script missing required behavior: $required"
         }

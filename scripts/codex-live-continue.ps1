@@ -11,6 +11,21 @@ param(
 
     [string]$UsageWarningPattern = "(?i)(usage limit|rate limit|limit reached|usage capped|quota|try again.*(?:at|in)|resets?\s+(?:at|in)|reset\s+(?:at|in|time))",
 
+    [string]$ApprovalPromptPattern = "(?is)(permission|approval|approve|allow|grant|sandbox|trust|would you like to run|run the following command|yes,\s*proceed|tell codex what to do differently|never ask|don't ask|dont ask|\byes\b|\bno\b)",
+
+    [string]$InteractivePromptBlockPattern = "(?ims)(would you like to|run the following command|yes,\s*proceed|do not ask again|don't ask again|dont ask again|tell codex what to do differently|^\s*[1-9][\.)]\s+\S)",
+
+    [ValidatePattern("^[1-9]$")]
+    [string]$ApprovalChoice = "1",
+
+    [string]$DoNotAskAgainApprovalPattern = "(?is)(do not ask again|don't ask again|dont ask again|never ask again)",
+
+    [ValidatePattern("^[1-9]$")]
+    [string]$DoNotAskAgainApprovalChoice = "2",
+
+    [ValidateRange(0, 3600)]
+    [int]$ApprovalChoiceCooldownSeconds = 5,
+
     [ValidateRange(0, 604800)]
     [int]$UsagePauseFallbackSeconds = 3600,
 
@@ -18,7 +33,7 @@ param(
     [int]$PollMilliseconds = 750,
 
     [ValidateRange(100, 30000)]
-    [int]$StableClearMilliseconds = 1200,
+    [int]$StableClearMilliseconds = 5000,
 
     [ValidateRange(500, 10000)]
     [int]$SubmitConfirmMilliseconds = 3500,
@@ -62,6 +77,8 @@ param(
     [switch]$ExitOnFocusLoss,
 
     [switch]$PauseWhenTargetNotForeground,
+
+    [switch]$AutoSelectApprovalChoice,
 
     [switch]$DisableUsageLimitPause,
 
@@ -459,7 +476,9 @@ function Add-AccessibleText {
 function Get-LiveSessionStatusText {
     param(
         [Parameter(Mandatory = $true)]
-        [IntPtr]$Handle
+        [IntPtr]$Handle,
+
+        [switch]$FullWindow
     )
 
     $root = [System.Windows.Automation.AutomationElement]::FromHandle($Handle)
@@ -472,13 +491,13 @@ function Get-LiveSessionStatusText {
     }
 
     $rect = $root.Current.BoundingRectangle
-    $bottomStart = $rect.Bottom - ($rect.Height * $BottomFraction)
+    $bottomStart = if ($FullWindow) { $rect.Top } else { $rect.Bottom - ($rect.Height * $BottomFraction) }
     $texts = New-Object System.Collections.Generic.List[string]
     $included = 0
     $walker = [System.Windows.Automation.TreeWalker]::RawViewWalker
     Add-AccessibleText -Element $root -Walker $walker -BottomStart $bottomStart -WindowHeight $rect.Height -Texts ([ref]$texts) -IncludedCount ([ref]$included)
 
-    $usedFallback = $false
+    $usedFallback = [bool]$FullWindow
     if ($texts.Count -eq 0 -and $AllowFullWindowFallback) {
         $usedFallback = $true
         Add-AccessibleText -Element $root -Walker $walker -BottomStart $rect.Top -WindowHeight $rect.Height -Texts ([ref]$texts) -IncludedCount ([ref]$included)
@@ -669,6 +688,105 @@ function Get-UsagePauseState {
     }
 }
 
+function Get-ApprovalPromptMatch {
+    param(
+        [string]$Text,
+
+        [string]$ScanScope = "bottom"
+    )
+
+    if (-not $AutoSelectApprovalChoice -or [string]::IsNullOrWhiteSpace($Text)) {
+        return [pscustomobject]@{
+            Detected = $false
+            Context = ""
+            Choice = $ApprovalChoice
+            ChoiceReason = "not_detected"
+            ScanScope = $ScanScope
+        }
+    }
+
+    $approvalTailLines = [Math]::Min(50, [Math]::Max($TailLines, 30))
+    $scanText = Select-TailText -Text $Text -LineCount $approvalTailLines
+    $numberedChoices = [regex]::Matches($scanText, "(?m)^\s*[1-9][\.)]\s+\S")
+    if ($numberedChoices.Count -lt 2 -or $scanText -notmatch $ApprovalPromptPattern) {
+        return [pscustomobject]@{
+            Detected = $false
+            Context = ""
+            Choice = $ApprovalChoice
+            ChoiceReason = "not_detected"
+            ScanScope = $ScanScope
+        }
+    }
+
+    $context = $scanText
+    if ($context.Length -gt 1000) {
+        $context = $context.Substring(0, 1000)
+    }
+
+    $choice = $ApprovalChoice
+    $choiceReason = "default"
+    if ($scanText -match $DoNotAskAgainApprovalPattern) {
+        $choice = $DoNotAskAgainApprovalChoice
+        $choiceReason = "do_not_ask_again"
+    }
+
+    return [pscustomobject]@{
+        Detected = $true
+        Context = $context
+        Choice = $choice
+        ChoiceReason = $choiceReason
+        ScanScope = $ScanScope
+    }
+}
+
+function Get-InteractivePromptBlock {
+    param(
+        [string]$Text,
+
+        [string]$Title = "",
+
+        [string]$ScanScope = "bottom"
+    )
+
+    $approvalTailLines = [Math]::Min(50, [Math]::Max($TailLines, 30))
+    $scanText = Select-TailText -Text $Text -LineCount $approvalTailLines
+    $numberedChoices = [regex]::Matches($scanText, "(?m)^\s*[1-9][\.)]\s+\S")
+    $titleLooksInteractive = (-not [string]::IsNullOrWhiteSpace($Title)) -and ($Title -match "(?i)^Select\b")
+    $textLooksInteractive = (-not [string]::IsNullOrWhiteSpace($scanText)) -and ($scanText -match $InteractivePromptBlockPattern)
+    $commandPromptText = (-not [string]::IsNullOrWhiteSpace($scanText)) -and ($scanText -match "(?is)(would you like to run|run the following command|yes,\s*proceed|tell codex what to do differently)")
+
+    if (-not ($titleLooksInteractive -or $commandPromptText -or ($textLooksInteractive -and $numberedChoices.Count -ge 2))) {
+        return [pscustomobject]@{
+            Detected = $false
+            Context = ""
+            BlockReason = "not_detected"
+            ScanScope = $ScanScope
+        }
+    }
+
+    $context = $scanText
+    if ($context.Length -gt 1000) {
+        $context = $context.Substring(0, 1000)
+    }
+
+    $blockReason = if ($commandPromptText) {
+        "command_prompt"
+    }
+    elseif ($titleLooksInteractive) {
+        "select_title"
+    }
+    else {
+        "numbered_prompt"
+    }
+
+    return [pscustomobject]@{
+        Detected = $true
+        Context = $context
+        BlockReason = $blockReason
+        ScanScope = $ScanScope
+    }
+}
+
 function Set-LiveSessionForeground {
     param(
         [Parameter(Mandatory = $true)]
@@ -700,6 +818,44 @@ function Set-LiveSessionForeground {
     }
 
     return "foreground-failed"
+}
+
+function Send-ApprovalChoice {
+    param(
+        [Parameter(Mandatory = $true)]
+        [IntPtr]$Handle,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Choice
+    )
+
+    $activationMethod = Set-LiveSessionForeground -Handle $Handle
+    if ([CodexContinuumWindow]::GetForegroundWindow() -ne $Handle) {
+        $currentHandle = [CodexContinuumWindow]::GetForegroundWindow()
+        $currentHandleId = ("0x{0:x}" -f $currentHandle.ToInt64())
+        throw "target_window_not_foreground activation=$activationMethod current=$currentHandleId"
+    }
+
+    $choiceMethod = ""
+    try {
+        [CodexContinuumWindow]::SendUnicodeText($Choice, $false)
+        $choiceMethod = "sendinput-choice"
+    }
+    catch {
+        [System.Windows.Forms.SendKeys]::SendWait($Choice)
+        $choiceMethod = "sendkeys-choice"
+    }
+
+    Start-Sleep -Milliseconds 100
+
+    try {
+        [CodexContinuumWindow]::SendEnterKey()
+        return "$activationMethod+$choiceMethod+sendinput-enter"
+    }
+    catch {
+        [System.Windows.Forms.SendKeys]::SendWait("~")
+        return "$activationMethod+$choiceMethod+sendkeys-tilde"
+    }
 }
 
 function Send-ContinuePrompt {
@@ -837,6 +993,12 @@ Write-Receipt -Event "codex_live_continue.attached" -Data @{
     status_pattern = $StatusPattern
     title_working_pattern = $TitleWorkingPattern
     usage_warning_pattern = $UsageWarningPattern
+    approval_prompt_pattern = $ApprovalPromptPattern
+    interactive_prompt_block_pattern = $InteractivePromptBlockPattern
+    approval_choice = $ApprovalChoice
+    do_not_ask_again_approval_pattern = $DoNotAskAgainApprovalPattern
+    do_not_ask_again_approval_choice = $DoNotAskAgainApprovalChoice
+    approval_choice_cooldown_s = $ApprovalChoiceCooldownSeconds
     usage_pause_fallback_s = $UsagePauseFallbackSeconds
     timeout_s = $TimeoutSeconds
     window_title_pattern = $WindowTitlePattern
@@ -846,6 +1008,7 @@ Write-Receipt -Event "codex_live_continue.attached" -Data @{
     probe_only = [bool]$ProbeOnly
     exit_on_focus_loss = [bool]$ExitOnFocusLoss
     pause_when_target_not_foreground = [bool]$PauseWhenTargetNotForeground
+    auto_select_approval_choice = [bool]$AutoSelectApprovalChoice
     disable_usage_limit_pause = [bool]$DisableUsageLimitPause
     what_if = [bool]$WhatIfPreference
 }
@@ -882,6 +1045,11 @@ $clearSince = $null
 $lastPromptAt = (Get-Date).AddSeconds(-1 * ($CooldownSeconds + 1))
 $sentPrompts = 0
 $promptAttempts = 0
+$lastApprovalChoiceAt = (Get-Date).AddSeconds(-1 * ($ApprovalChoiceCooldownSeconds + 1))
+$approvalChoicesSent = 0
+$approvalChoiceAttempts = 0
+$lastInteractivePromptBlockAt = (Get-Date).AddSeconds(-11)
+$interactivePromptBlocks = 0
 $lastObservedState = $null
 $focusPaused = $false
 $usagePausedUntil = $null
@@ -954,6 +1122,31 @@ while ($MaxPrompts -eq 0 -or $sentPrompts -lt $MaxPrompts) {
 
     $status = Get-LiveSessionWorkingState -Handle $sessionHandle
     $isWorking = [bool]$status.Working
+    $approvalPrompt = [pscustomobject]@{
+        Detected = $false
+        Context = ""
+        Choice = $ApprovalChoice
+        ChoiceReason = "not_detected"
+        ScanScope = "not_scanned_working"
+    }
+    $interactivePromptBlock = [pscustomobject]@{
+        Detected = $false
+        Context = ""
+        BlockReason = "not_detected"
+        ScanScope = "not_scanned_working"
+    }
+    if (-not $isWorking) {
+        $approvalStatus = Get-LiveSessionStatusText -Handle $sessionHandle -FullWindow
+        $approvalText = [string]$approvalStatus.Text
+        if ([string]::IsNullOrWhiteSpace($approvalText)) {
+            $approvalText = [string]$status.Text
+        }
+
+        $approvalPrompt = Get-ApprovalPromptMatch -Text $approvalText -ScanScope "full_window_tail"
+        if (-not [bool]$approvalPrompt.Detected) {
+            $interactivePromptBlock = Get-InteractivePromptBlock -Text $approvalText -Title ([string]$status.Title) -ScanScope "full_window_tail"
+        }
+    }
 
     if ($lastObservedState -ne $isWorking) {
         $lastObservedState = $isWorking
@@ -966,6 +1159,83 @@ while ($MaxPrompts -eq 0 -or $sentPrompts -lt $MaxPrompts) {
             used_full_window_fallback = [bool]$status.UsedFallback
             session_id = $SessionId
         }
+    }
+
+    if ([bool]$approvalPrompt.Detected) {
+        $approvalCooldownClear = ((Get-Date) - $lastApprovalChoiceAt).TotalSeconds -ge $ApprovalChoiceCooldownSeconds
+        if ($approvalCooldownClear) {
+            $selectedApprovalChoice = [string]$approvalPrompt.Choice
+            $selectedApprovalChoiceReason = [string]$approvalPrompt.ChoiceReason
+            $target = "$handleId ($windowTitle)"
+            $action = "send approval choice '$selectedApprovalChoice' to the attached live Codex session"
+            $sent = $false
+            $inputMethod = ""
+            $sendError = ""
+            if ($PSCmdlet.ShouldProcess($target, $action)) {
+                $approvalChoiceAttempts += 1
+                try {
+                    $inputMethod = Send-ApprovalChoice -Handle $sessionHandle -Choice $selectedApprovalChoice
+                    $sent = $true
+                }
+                catch {
+                    $inputMethod = "approval-send-failed"
+                    $sendError = $_.Exception.Message
+                }
+            }
+
+            if ($sent -or $WhatIfPreference) {
+                $approvalChoicesSent += 1
+            }
+
+            $lastApprovalChoiceAt = Get-Date
+            Write-Receipt -Event "codex_live_continue.approval_choice" -Data @{
+                handle = $handleId
+                choice = $selectedApprovalChoice
+                choice_reason = $selectedApprovalChoiceReason
+                scan_scope = [string]$approvalPrompt.ScanScope
+                sent = $sent
+                what_if = [bool]$WhatIfPreference
+                input_method = $inputMethod
+                error = $sendError
+                prompt_context = [string]$approvalPrompt.Context
+                approval_choice_count = $approvalChoicesSent
+                approval_choice_attempts = $approvalChoiceAttempts
+                session_id = $SessionId
+            }
+
+            if ($sent) {
+                Write-Host "Sent Codex approval choice '$selectedApprovalChoice' ($selectedApprovalChoiceReason)."
+            }
+            elseif (-not [string]::IsNullOrWhiteSpace($sendError)) {
+                Write-Host "Approval choice send failed and will retry after cooldown: $sendError"
+            }
+        }
+
+        Start-Sleep -Milliseconds $PollMilliseconds
+        continue
+    }
+
+    if ([bool]$interactivePromptBlock.Detected) {
+        $clearSince = $null
+        $blockReceiptClear = ((Get-Date) - $lastInteractivePromptBlockAt).TotalSeconds -ge 10
+        if ($blockReceiptClear) {
+            $interactivePromptBlocks += 1
+            $lastInteractivePromptBlockAt = Get-Date
+            Write-Receipt -Event "codex_live_continue.interactive_prompt_blocked" -Data @{
+                handle = $handleId
+                block_reason = [string]$interactivePromptBlock.BlockReason
+                scan_scope = [string]$interactivePromptBlock.ScanScope
+                title = [string]$status.Title
+                prompt_context = [string]$interactivePromptBlock.Context
+                prompt_block_count = $interactivePromptBlocks
+                prompts_sent = $sentPrompts
+                session_id = $SessionId
+            }
+            Write-Host "Paused Continuum because an interactive Codex prompt is visible; not sending '$Prompt'."
+        }
+
+        Start-Sleep -Milliseconds $PollMilliseconds
+        continue
     }
 
     if (-not $DisableUsageLimitPause) {
@@ -1117,6 +1387,9 @@ Write-Receipt -Event "codex_live_continue.stopped" -Data @{
     reason = $stopReason
     prompts_sent = $sentPrompts
     prompt_attempts = $promptAttempts
+    approval_choices_sent = $approvalChoicesSent
+    approval_choice_attempts = $approvalChoiceAttempts
+    interactive_prompt_blocks = $interactivePromptBlocks
     session_id = $SessionId
 }
 }

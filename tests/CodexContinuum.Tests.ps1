@@ -16,6 +16,7 @@ Describe "Codex Continuum package" {
         $watcher = Get-Content -LiteralPath (Join-Path $repoRoot "scripts\codex-live-continue.ps1") -Raw
         foreach ($pattern in @(
             "SubmitConfirmMilliseconds",
+            'StableClearMilliseconds = 5000',
             "sendkeys-tilde",
             "sendkeys-ctrl-m",
             "SendEnterKey",
@@ -34,7 +35,21 @@ Describe "Codex Continuum package" {
             "UsagePauseFallbackSeconds",
             "Get-UsagePauseState",
             "codex_live_continue.usage_paused",
-            "codex_live_continue.usage_resumed"
+            "codex_live_continue.usage_resumed",
+            "AutoSelectApprovalChoice",
+            "ApprovalPromptPattern",
+            "InteractivePromptBlockPattern",
+            "would you like to run",
+            "DoNotAskAgainApprovalPattern",
+            "DoNotAskAgainApprovalChoice",
+            "FullWindow",
+            "full_window_tail",
+            "not_scanned_working",
+            "Get-ApprovalPromptMatch",
+            "Get-InteractivePromptBlock",
+            "Send-ApprovalChoice",
+            "codex_live_continue.approval_choice",
+            "codex_live_continue.interactive_prompt_blocked"
         )) {
             if ($watcher -notmatch [regex]::Escape($pattern)) {
                 throw "Watcher behavior check failed. Missing pattern '$pattern'."
@@ -84,6 +99,27 @@ Describe "Codex Continuum package" {
         }
     }
 
+    It "keeps the explicit startup intake before attaching" {
+        $launcher = Get-Content -LiteralPath (Join-Path $repoRoot "scripts\start-codex-continuum.ps1") -Raw
+        foreach ($pattern in @(
+            "Read-InteractiveTargetProcessId",
+            "Read-InteractiveSessionId",
+            "Resolve-LiveCodexWindowCandidateFromProcessId",
+            "Target visible Codex PowerShell PID",
+            "Session/thread id",
+            "NonInteractive",
+            "AutoSelectApprovalChoice",
+            "ApprovalChoice",
+            "DoNotAskAgainApprovalChoice",
+            "ApprovalPromptPattern",
+            "InteractivePromptBlockPattern"
+        )) {
+            if ($launcher -notmatch [regex]::Escape($pattern)) {
+                throw "Launcher startup intake missing pattern '$pattern'."
+            }
+        }
+    }
+
     It "summarizes Continuum status from receipts" {
         $statusScript = Join-Path $repoRoot "scripts\get-continuum-status.ps1"
         if (-not (Test-Path -LiteralPath $statusScript)) {
@@ -122,6 +158,34 @@ Describe "Codex Continuum package" {
                 input_method = "test-confirmed-title"
                 confirmed_work_observed = $true
                 error = ""
+            } | ConvertTo-Json -Compress),
+            ([ordered]@{
+                ts = $now.AddSeconds(-1).ToString("o")
+                event = "codex_live_continue.approval_choice"
+                sent = $true
+                choice = "2"
+                choice_reason = "do_not_ask_again"
+                scan_scope = "full_window_tail"
+                approval_choice_count = 2
+                approval_choice_attempts = 2
+                input_method = "test-choice"
+                error = ""
+            } | ConvertTo-Json -Compress),
+            ([ordered]@{
+                ts = $now.AddMilliseconds(-500).ToString("o")
+                event = "codex_live_continue.interactive_prompt_blocked"
+                block_reason = "command_prompt"
+                scan_scope = "full_window_tail"
+                prompt_block_count = 1
+                title = "Select Test"
+            } | ConvertTo-Json -Compress),
+            ([ordered]@{
+                ts = $now.AddMilliseconds(-250).ToString("o")
+                event = "codex_live_continue.attached"
+                target_process_id = 0
+                session_id = "test-session"
+                handle = "0x1"
+                title_working_pattern = "(^|:\s*)[\u280b]\s+"
             } | ConvertTo-Json -Compress)
         ) | Set-Content -LiteralPath $receipt -Encoding UTF8
 
@@ -138,6 +202,30 @@ Describe "Codex Continuum package" {
 
             if ($summary.LastPrompt.PromptCount -ne 1) {
                 throw "Status did not report prompt count."
+            }
+
+            if ($summary.LastApprovalChoice.Choice -ne "2") {
+                throw "Status did not report approval choice."
+            }
+
+            if ($summary.LastApprovalChoice.ChoiceReason -ne "do_not_ask_again") {
+                throw "Status did not report approval choice reason."
+            }
+
+            if ($summary.LastApprovalChoice.ScanScope -ne "full_window_tail") {
+                throw "Status did not report approval scan scope."
+            }
+
+            if ($summary.LastInteractivePromptBlock.Reason -ne "command_prompt") {
+                throw "Status did not report interactive prompt block reason."
+            }
+
+            if ($summary.LastInteractivePromptBlock.ScanScope -ne "full_window_tail") {
+                throw "Status did not report interactive prompt block scan scope."
+            }
+
+            if ($summary.LastInteractivePromptBlock.Active -ne $false) {
+                throw "Status kept an interactive prompt block active after a newer attach."
             }
         }
         finally {

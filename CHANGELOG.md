@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+- Added explicit startup prompts for target PID and session/thread id before
+  Continuum attaches.
+- Added `-NonInteractive` for scripted starts that should keep argument-only
+  behavior.
+- Added opt-in `-AutoSelectApprovalChoice` for numbered Codex approval prompts,
+  with `approval_choice` receipts and status reporting.
+- Added a separate default choice `2` for approval prompts that say not to ask
+  again.
+- Increased the default stable-idle delay before typing `continue` to five
+  seconds to avoid transient status flicker.
+- Changed approval detection to scan the visible full-window tail while Codex is
+  idle, so taller approval menus are detected without selecting from old output
+  while work is running.
+- Matched Codex command approval prompts that start with "Would you like to run
+  the following command?".
+- Added a fail-closed interactive prompt block so Continuum will not type
+  `continue` into an unhandled numbered/approval menu.
+
 ## 0.2.1
 
 - Added usage-limit pause detection for live Codex reset warnings.

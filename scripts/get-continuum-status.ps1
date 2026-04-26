@@ -171,6 +171,8 @@ function Get-ContinuumSummary {
     $lastAttached = Select-LastReceiptEvent -Events $eventArray -Name "codex_live_continue.attached"
     $lastStatus = Select-LastReceiptEvent -Events $eventArray -Name "codex_live_continue.status"
     $lastPrompt = Select-LastReceiptEvent -Events $eventArray -Name "codex_live_continue.prompt"
+    $lastApprovalChoice = Select-LastReceiptEvent -Events $eventArray -Name "codex_live_continue.approval_choice"
+    $lastInteractivePromptBlock = Select-LastReceiptEvent -Events $eventArray -Name "codex_live_continue.interactive_prompt_blocked"
     $lastStopped = Select-LastReceiptEvent -Events $eventArray -Name "codex_live_continue.stopped"
     $lastUsagePaused = Select-LastReceiptEvent -Events $eventArray -Name "codex_live_continue.usage_paused"
     $lastUsageResumed = Select-LastReceiptEvent -Events $eventArray -Name "codex_live_continue.usage_resumed"
@@ -179,6 +181,8 @@ function Get-ContinuumSummary {
     $lastAttachedTime = Convert-ReceiptTime -Event $lastAttached
     $lastStatusTime = Convert-ReceiptTime -Event $lastStatus
     $lastPromptTime = Convert-ReceiptTime -Event $lastPrompt
+    $lastApprovalChoiceTime = Convert-ReceiptTime -Event $lastApprovalChoice
+    $lastInteractivePromptBlockTime = Convert-ReceiptTime -Event $lastInteractivePromptBlock
     $lastStoppedTime = Convert-ReceiptTime -Event $lastStopped
     $lastUsagePausedTime = Convert-ReceiptTime -Event $lastUsagePaused
     $lastUsageResumedTime = Convert-ReceiptTime -Event $lastUsageResumed
@@ -209,6 +213,9 @@ function Get-ContinuumSummary {
     $currentWorking = $liveWorkingByTitle -or ((-not $liveTitleKnown) -and $lastStatusWorking)
     $lastPromptSent = Convert-ToBoolean (Get-PropertyValue -Object $lastPrompt -Name "sent" -Default $false)
     $lastPromptError = [string](Get-PropertyValue -Object $lastPrompt -Name "error" -Default "")
+    $lastApprovalChoiceSent = Convert-ToBoolean (Get-PropertyValue -Object $lastApprovalChoice -Name "sent" -Default $false)
+    $lastApprovalChoiceError = [string](Get-PropertyValue -Object $lastApprovalChoice -Name "error" -Default "")
+    $lastInteractivePromptBlockReason = [string](Get-PropertyValue -Object $lastInteractivePromptBlock -Name "block_reason" -Default "")
     $lastStatusSignal = [string](Get-PropertyValue -Object $lastStatus -Name "working_signal" -Default "")
     $lastStoppedReason = [string](Get-PropertyValue -Object $lastStopped -Name "reason" -Default "")
     $stoppedAfterAttach = $false
@@ -225,6 +232,26 @@ function Get-ContinuumSummary {
 
         if ($null -ne $lastStoppedTime -and $lastStoppedTime -gt $lastUsagePausedTime) {
             $usagePauseActive = $false
+        }
+    }
+
+    $interactivePromptBlockActive = $false
+    if ($null -ne $lastInteractivePromptBlockTime -and -not $currentWorking) {
+        $interactivePromptBlockActive = $true
+        if ($null -ne $lastPromptTime -and $lastPromptTime -gt $lastInteractivePromptBlockTime) {
+            $interactivePromptBlockActive = $false
+        }
+
+        if ($null -ne $lastApprovalChoiceTime -and $lastApprovalChoiceTime -gt $lastInteractivePromptBlockTime) {
+            $interactivePromptBlockActive = $false
+        }
+
+        if ($null -ne $lastAttachedTime -and $lastAttachedTime -gt $lastInteractivePromptBlockTime) {
+            $interactivePromptBlockActive = $false
+        }
+
+        if ($null -ne $lastStoppedTime -and $lastStoppedTime -gt $lastInteractivePromptBlockTime) {
+            $interactivePromptBlockActive = $false
         }
     }
 
@@ -266,6 +293,11 @@ function Get-ContinuumSummary {
         $state = "UsagePaused"
         $health = "Paused"
         $action = "Waiting for Codex usage reset before sending more continuation prompts."
+    }
+    elseif ($interactivePromptBlockActive) {
+        $state = "InteractivePromptBlocked"
+        $health = "Paused"
+        $action = "Waiting for the visible interactive prompt to clear; Continuum will not send continue into it."
     }
     elseif (-not [string]::IsNullOrWhiteSpace($lastPromptError) -and -not $liveWorkingByTitle -and -not $lastStatusWorking) {
         $state = "LastPromptFailed"
@@ -336,6 +368,27 @@ function Get-ContinuumSummary {
             InputMethod = [string](Get-PropertyValue -Object $lastPrompt -Name "input_method" -Default "")
             ConfirmedWorkObserved = Convert-ToBoolean (Get-PropertyValue -Object $lastPrompt -Name "confirmed_work_observed" -Default $false)
             Error = $lastPromptError
+        }
+        LastApprovalChoice = [pscustomobject]@{
+            At = if ($null -eq $lastApprovalChoiceTime) { $null } else { $lastApprovalChoiceTime.ToString("o") }
+            AgeSeconds = Get-AgeSeconds -Time $lastApprovalChoiceTime
+            Sent = [bool]$lastApprovalChoiceSent
+            Choice = [string](Get-PropertyValue -Object $lastApprovalChoice -Name "choice" -Default "")
+            ChoiceReason = [string](Get-PropertyValue -Object $lastApprovalChoice -Name "choice_reason" -Default "")
+            ScanScope = [string](Get-PropertyValue -Object $lastApprovalChoice -Name "scan_scope" -Default "")
+            ApprovalChoiceCount = [int](Get-PropertyValue -Object $lastApprovalChoice -Name "approval_choice_count" -Default 0)
+            ApprovalChoiceAttempts = [int](Get-PropertyValue -Object $lastApprovalChoice -Name "approval_choice_attempts" -Default 0)
+            InputMethod = [string](Get-PropertyValue -Object $lastApprovalChoice -Name "input_method" -Default "")
+            Error = $lastApprovalChoiceError
+        }
+        LastInteractivePromptBlock = [pscustomobject]@{
+            At = if ($null -eq $lastInteractivePromptBlockTime) { $null } else { $lastInteractivePromptBlockTime.ToString("o") }
+            AgeSeconds = Get-AgeSeconds -Time $lastInteractivePromptBlockTime
+            Active = [bool]$interactivePromptBlockActive
+            Reason = $lastInteractivePromptBlockReason
+            ScanScope = [string](Get-PropertyValue -Object $lastInteractivePromptBlock -Name "scan_scope" -Default "")
+            PromptBlockCount = [int](Get-PropertyValue -Object $lastInteractivePromptBlock -Name "prompt_block_count" -Default 0)
+            Title = [string](Get-PropertyValue -Object $lastInteractivePromptBlock -Name "title" -Default "")
         }
         UsagePause = [pscustomobject]@{
             Active = [bool]$usagePauseActive
