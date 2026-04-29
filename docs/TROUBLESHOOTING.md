@@ -85,10 +85,11 @@ Run:
 powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" status
 ```
 
-If `State` is `UsagePaused`, Continuum saw a usage-limit or reset warning in the
-live Codex window and intentionally stopped sending `continue`. The
-`UsagePause` section shows `Until`, `RemainingSeconds`, `Reason`, and the
-captured warning text. It resumes automatically after `Until`.
+If `State` is `UsagePaused`, Continuum saw an actionable usage-limit or reset
+warning in the live Codex window and intentionally stopped sending `continue`.
+The `UsagePause` section shows `Until`, `RemainingSeconds`, `Reason`, and the
+captured warning text. Generic transcript or repository text that only mentions
+quota should not pause the watcher. It resumes automatically after `Until`.
 
 If the warning text is visible only outside the bottom terminal region, restart
 with `-AllowFullWindowFallback` so Continuum can inspect the full window.

@@ -69,12 +69,13 @@ wait matcher.
 
 ## Usage-Limit Pause
 
-Continuum watches the captured live-session text for Codex usage-limit,
-rate-limit, quota, and reset warnings. When it sees one, it stops sending
-`continue`, writes a `codex_live_continue.usage_paused` receipt, and waits until
-the reset time it can parse. It recognizes relative warnings such as
-`try again in 30 minutes`, clock warnings such as `resets at 3:00 PM`, and ISO
-timestamps.
+Continuum watches the captured live-session text for actionable Codex
+usage-limit, rate-limit, and reset warnings. Generic transcript or repository
+text that only mentions quota is ignored. When Continuum sees an actionable
+warning, it stops sending `continue`, writes a
+`codex_live_continue.usage_paused` receipt, and waits until the reset time it can
+parse. It recognizes relative warnings such as `try again in 30 minutes`, clock
+warnings such as `resets at 3:00 PM`, and ISO timestamps.
 
 If a warning does not include a reset time, Continuum pauses for one hour by
 default:
@@ -100,9 +101,9 @@ usage warnings:
 
 Continuum distinguishes stop conditions from temporary pauses:
 
-- Usage-limit, rate-limit, quota, and reset warnings write
-  `codex_live_continue.usage_paused` and pause sends until the parsed reset
-  time or fallback pause expires.
+- Actionable usage-limit, rate-limit, and reset warnings write
+  `codex_live_continue.usage_paused` and pause sends until the parsed reset time
+  or fallback pause expires.
 - Visible interactive prompts write
   `codex_live_continue.interactive_prompt_blocked` and block `continue` until
   the prompt clears or a safe approval choice is sent.

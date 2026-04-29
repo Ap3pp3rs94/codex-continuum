@@ -125,8 +125,8 @@ reliably stable.
 
 Stop or pause behavior:
 
-- `usage_paused`: usage-limit, rate-limit, quota, or reset warning detected;
-  sends pause until the parsed reset time or fallback pause expires.
+- `usage_paused`: actionable usage-limit, rate-limit, or reset warning
+  detected; sends pause until the parsed reset time or fallback pause expires.
 - `interactive_prompt_blocked`: visible approval/menu prompt was detected but
   not safely selected; sends pause until the prompt clears.
 - `window_closed`: attached live window no longer exists; watcher stops.
@@ -142,10 +142,12 @@ Check watcher health:
 powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" status
 ```
 
-If a usage warning appears, Continuum records a `usage_paused` receipt and stops
-sending `continue` until the reset time. If the warning does not include a time,
-the default pause is one hour. Override with `-UsagePauseFallbackSeconds`, or
-disable the guard with `-DisableUsageLimitPause`.
+If an actionable usage warning appears, Continuum records a `usage_paused`
+receipt and stops sending `continue` until the reset time. Generic transcript or
+repository text that only mentions quota does not pause the watcher. If the
+warning does not include a time, the default pause is one hour. Override with
+`-UsagePauseFallbackSeconds`, or disable the guard with
+`-DisableUsageLimitPause`.
 
 Auto-select approval prompts only when you intentionally want Continuum to pick
 choice `1` on numbered Codex approval menus, or choice `2` when the prompt says

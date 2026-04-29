@@ -35,6 +35,9 @@
   `codex_live_continue.selection_mode_cleared` receipts.
 - Added `Waiting for background...` as a separate active signal with
   `working_signal:"background_wait"` receipts.
+- Tightened usage-limit pause detection so generic quota/roadmap text cannot
+  trigger the fallback pause; Continuum now requires an actionable reset,
+  try-again, or limit-reached warning.
 
 ## 0.2.1
 

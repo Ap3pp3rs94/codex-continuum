@@ -115,7 +115,7 @@ Hard stops:
 
 Pauses:
 
-- `usage_paused`: a usage-limit, rate-limit, quota, or reset warning was
+- `usage_paused`: an actionable usage-limit, rate-limit, or reset warning was
   detected.
 - `interactive_prompt_blocked`: a visible prompt looked interactive but was not
   safely selectable.

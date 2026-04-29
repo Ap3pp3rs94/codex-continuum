@@ -25,7 +25,7 @@ param(
 
     [string]$TitleWorkingPattern = "(^|:\s*)[\u280b\u2819\u2839\u2838\u283c\u2834\u2826\u2827\u2807\u280f]\s+",
 
-    [string]$UsageWarningPattern = "(?i)(usage limit|rate limit|limit reached|usage capped|quota|try again.*(?:at|in)|resets?\s+(?:at|in)|reset\s+(?:at|in|time))",
+    [string]$UsageWarningPattern = "(?i)(\b(?:try again|resets?|reset|available|renews?)\s+(?:at|in|on)\b|\b(?:usage|rate|quota|message|token)\s+(?:limit|cap|quota)\s+(?:reached|exceeded)\b|\b(?:reached|exceeded|hit)\s+(?:your\s+)?(?:usage|rate|message|token|quota)\s+(?:limit|cap|quota)\b|\blimit\s+(?:reached|exceeded)\b)",
 
     [string]$ApprovalPromptPattern = "(?is)(permission|approval|approve|allow|grant|sandbox|trust|would you like to run|run the following command|yes,\s*proceed|tell codex what to do differently|never ask|don't ask|dont ask|\byes\b|\bno\b)",
 

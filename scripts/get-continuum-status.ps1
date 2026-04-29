@@ -233,6 +233,10 @@ function Get-ContinuumSummary {
         if ($null -ne $lastStoppedTime -and $lastStoppedTime -gt $lastUsagePausedTime) {
             $usagePauseActive = $false
         }
+
+        if ($null -ne $lastAttachedTime -and $lastAttachedTime -gt $lastUsagePausedTime) {
+            $usagePauseActive = $false
+        }
     }
 
     $interactivePromptBlockActive = $false

@@ -46,6 +46,7 @@ Describe "Codex Continuum package" {
             "UsageWarningPattern",
             "UsagePauseFallbackSeconds",
             "Get-UsagePauseState",
+            "Test-ActionableUsageWarningContext",
             "codex_live_continue.usage_paused",
             "codex_live_continue.usage_resumed",
             "AutoSelectApprovalChoice",
@@ -70,6 +71,20 @@ Describe "Codex Continuum package" {
 
         if ($watcher -match '\$titleLooksInteractive') {
             throw "Watcher still treats a Select title alone as an interactive prompt."
+        }
+
+        $defaultUsagePatternMatch = [regex]::Match($watcher, '\[string\]\$UsageWarningPattern = "([^"]+)"')
+        if (-not $defaultUsagePatternMatch.Success) {
+            throw "Could not find the default usage warning pattern."
+        }
+
+        $defaultUsagePattern = $defaultUsagePatternMatch.Groups[1].Value
+        if ("docs\canonical\ROADMAP.md:24193:* quota exhaustion behavior" -match $defaultUsagePattern) {
+            throw "Default usage warning pattern matches generic quota documentation text."
+        }
+
+        if ("Usage limit reached. Try again in 30 minutes." -notmatch $defaultUsagePattern) {
+            throw "Default usage warning pattern does not match an actionable usage-limit warning."
         }
     }
 
@@ -295,6 +310,44 @@ Describe "Codex Continuum package" {
 
             if ($summary.UsagePause.RemainingSeconds -le 0) {
                 throw "Status did not report usage pause remaining time."
+            }
+        }
+        finally {
+            Remove-Item -LiteralPath $receipt -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It "clears usage-limit pause state after a newer attach" {
+        $statusScript = Join-Path $repoRoot "scripts\get-continuum-status.ps1"
+        $receipt = Join-Path ([System.IO.Path]::GetTempPath()) "codex-continuum-usage-pause-attach-test-$PID.jsonl"
+        $now = [DateTimeOffset]::Now
+        $pauseUntil = $now.AddMinutes(30)
+        @(
+            ([ordered]@{
+                ts = $now.AddSeconds(-20).ToString("o")
+                event = "codex_live_continue.usage_paused"
+                pause_until = $pauseUntil.ToString("o")
+                reason = "relative_reset_time"
+                matched_text = "Usage limit reached. Try again in 30 minutes."
+                fallback_used = $false
+                prompts_sent = 2
+                session_id = "usage-test-session"
+            } | ConvertTo-Json -Compress),
+            ([ordered]@{
+                ts = $now.AddSeconds(-10).ToString("o")
+                event = "codex_live_continue.attached"
+                target_process_id = 0
+                session_id = "usage-test-session"
+                handle = "0x1"
+                title_working_pattern = "(^|:\s*)[\u280b]\s+"
+            } | ConvertTo-Json -Compress)
+        ) | Set-Content -LiteralPath $receipt -Encoding UTF8
+
+        try {
+            $json = & $statusScript -ReceiptPath $receipt -Json
+            $summary = ($json | Out-String) | ConvertFrom-Json
+            if ($summary.UsagePause.Active -ne $false) {
+                throw "Status kept a usage pause active after a newer attach."
             }
         }
         finally {
