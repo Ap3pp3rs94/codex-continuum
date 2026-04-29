@@ -13,8 +13,9 @@ Codex Continuum is a live-window watcher.
    choice with a receipt.
 4. If an interactive prompt is visible but no approval choice was sent, write a
    block receipt and skip continuation for that poll.
-5. Watch for bottom `Working` text or the Codex spinner title, or treat the
-   startup state as eligible if the session is already idle.
+5. Watch for bottom `Working` text, `Waiting for background...` text, or the
+   Codex spinner title, or treat the startup state as eligible if the session is
+   already idle.
 6. Wait until idle remains stable for five seconds.
 7. Bring the same target window foreground with a Win32 activation retry path.
 8. Clear console selection mode with Escape, then type `continue`.
@@ -49,9 +50,10 @@ SendInput VK_RETURN
 SendKeys "{ENTER}"
 ```
 
-After each submit attempt, it waits for `Working` text or a Codex spinner title.
-Receipts record the method and signal that confirmed, or record `unconfirmed` if
-no method produced a visible status transition.
+After each submit attempt, it waits for `Working` text, `Waiting for
+background...` text, or a Codex spinner title. Receipts record the method and
+signal that confirmed, or record `unconfirmed` if no method produced a visible
+status transition.
 
 Unconfirmed submit attempts increment `consecutive_failed_submit_attempts`. The
 watcher stops with `repeated_failed_submit` when the count reaches
@@ -131,6 +133,9 @@ first `continue`.
 
 The default text status pattern is line-anchored and case-sensitive so transcript
 output such as `working copy` does not count as Codex's live `Working` status.
+Background waits are a separate active signal and receipt as
+`working_signal:"background_wait"`, so the watcher waits instead of typing
+`continue` while Codex is waiting on a background task.
 
 ## Startup Intake
 

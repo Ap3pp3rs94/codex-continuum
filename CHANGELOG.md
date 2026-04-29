@@ -33,6 +33,8 @@
   working state.
 - Added explicit console selection-mode clearing with
   `codex_live_continue.selection_mode_cleared` receipts.
+- Added `Waiting for background...` as a separate active signal with
+  `working_signal:"background_wait"` receipts.
 
 ## 0.2.1
 

@@ -63,8 +63,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plu
 ```
 
 Use this mode when bottom `Working` text is stale or unreliable. The
-`-StatusPattern '(?!)'` argument disables bottom-status matching for the run, so
-work detection relies on the Codex title spinner.
+`-StatusPattern '(?!)'` argument disables bottom `Working` matching for the run,
+so work detection relies on the Codex title spinner plus the separate background
+wait matcher.
 
 ## Usage-Limit Pause
 
@@ -218,8 +219,9 @@ to overwrite a git checkout unless you pass `-Force`.
 ## Submit Confirmation
 
 Continuum types `continue`, sends a submit key, then waits for Codex to become
-active again. It checks both the bottom `Working` status text and the spinner
-prefix that Codex puts in the PowerShell window title.
+active again. It checks bottom `Working` status text, bottom `Waiting for
+background...` text, and the spinner prefix that Codex puts in the PowerShell
+window title.
 
 Default submit confirmation window:
 
@@ -232,6 +234,8 @@ that value.
 
 If your terminal title does not use the default Codex spinner prefix, override
 `-TitleWorkingPattern`.
+
+If Codex changes the background-wait wording, override `-BackgroundWaitPattern`.
 
 ## Downloadable Plugin Install
 

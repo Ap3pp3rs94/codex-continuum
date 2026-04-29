@@ -7,6 +7,9 @@ param(
     [ValidateNotNullOrEmpty()]
     [string]$StatusPattern = "(?m)^\s*Working\s*$",
 
+    [ValidateNotNullOrEmpty()]
+    [string]$BackgroundWaitPattern = "(?m)^\s*Waiting for background(?:\s+\S.*)?\s*$",
+
     [string]$TitleWorkingPattern = "(^|:\s*)[\u280b\u2819\u2839\u2838\u283c\u2834\u2826\u2827\u2807\u280f]\s+",
 
     [string]$UsageWarningPattern = "(?i)(usage limit|rate limit|limit reached|usage capped|quota|try again.*(?:at|in)|resets?\s+(?:at|in)|reset\s+(?:at|in|time))",
@@ -531,9 +534,13 @@ function Get-LiveSessionWorkingState {
     $status = Get-LiveSessionStatusText -Handle $Handle
     $title = [CodexContinuumWindow]::GetTitle($Handle)
     $workingByText = ([string]$status.Text) -cmatch $StatusPattern
+    $backgroundWaitByText = ([string]$status.Text) -cmatch $BackgroundWaitPattern
     $workingByTitle = (-not [string]::IsNullOrWhiteSpace($TitleWorkingPattern)) -and ($title -match $TitleWorkingPattern)
     $signal = if ($workingByText) {
         "text"
+    }
+    elseif ($backgroundWaitByText) {
+        "background_wait"
     }
     elseif ($workingByTitle) {
         "title"
@@ -545,7 +552,7 @@ function Get-LiveSessionWorkingState {
     return [pscustomobject]@{
         Text = [string]$status.Text
         Title = $title
-        Working = [bool]($workingByText -or $workingByTitle)
+        Working = [bool]($workingByText -or $backgroundWaitByText -or $workingByTitle)
         WorkingSignal = $signal
         IncludedCount = [int]$status.IncludedCount
         UsedFallback = [bool]$status.UsedFallback
@@ -1029,6 +1036,7 @@ Write-Receipt -Event "codex_live_continue.attached" -Data @{
     bottom_fraction = $BottomFraction
     tail_lines = $TailLines
     status_pattern = $StatusPattern
+    background_wait_pattern = $BackgroundWaitPattern
     title_working_pattern = $TitleWorkingPattern
     usage_warning_pattern = $UsageWarningPattern
     approval_prompt_pattern = $ApprovalPromptPattern

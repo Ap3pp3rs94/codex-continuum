@@ -20,6 +20,9 @@ param(
     [ValidateNotNullOrEmpty()]
     [string]$StatusPattern = "(?m)^\s*Working\s*$",
 
+    [ValidateNotNullOrEmpty()]
+    [string]$BackgroundWaitPattern = "(?m)^\s*Waiting for background(?:\s+\S.*)?\s*$",
+
     [string]$TitleWorkingPattern = "(^|:\s*)[\u280b\u2819\u2839\u2838\u283c\u2834\u2826\u2827\u2807\u280f]\s+",
 
     [string]$UsageWarningPattern = "(?i)(usage limit|rate limit|limit reached|usage capped|quota|try again.*(?:at|in)|resets?\s+(?:at|in)|reset\s+(?:at|in|time))",
@@ -362,6 +365,7 @@ if ($TargetProcessId -eq 0 -and $TargetWindowHandle -eq 0) {
 $watcherParameters = @{
     Prompt = $Prompt
     StatusPattern = $StatusPattern
+    BackgroundWaitPattern = $BackgroundWaitPattern
     TitleWorkingPattern = $TitleWorkingPattern
     UsageWarningPattern = $UsageWarningPattern
     ApprovalPromptPattern = $ApprovalPromptPattern

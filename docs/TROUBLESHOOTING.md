@@ -125,11 +125,12 @@ Run a probe:
 powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" -ProjectName "<ProjectName>" -ProbeOnly -VerboseStatusText
 ```
 
-Probe output includes `signal=text`, `signal=title`, or `signal=none`. If the
-captured text never contains `Working`, Continuum can still use the Codex
-spinner in the PowerShell title. If both signals are missing, try
-`-AllowFullWindowFallback`, override `-TitleWorkingPattern`, or target a
-different terminal host.
+Probe output includes `signal=text`, `signal=background_wait`, `signal=title`,
+or `signal=none`. If the captured text never contains `Working` or `Waiting for
+background`, Continuum can still use the Codex spinner in the PowerShell title.
+If all signals are missing, try `-AllowFullWindowFallback`, override
+`-TitleWorkingPattern` or `-BackgroundWaitPattern`, or target a different
+terminal host.
 
 If the watcher attached while Codex was already idle, make sure you are on the
 current build. The default now sends once on stable startup idle. Only pass

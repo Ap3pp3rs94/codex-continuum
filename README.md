@@ -3,11 +3,11 @@
 Universal live-session continuation for Codex on Windows.
 
 Codex Continuum watches one live Codex PowerShell window for live work signals:
-the bottom `Working` text when UI Automation can see it, or the Codex spinner in
-the window title when the terminal hides the bottom status. When work clears, it
-types `continue` and submits it in the same window. It is built for the visible
-session you are already using, not for hidden backend resume or archived
-transcript replay.
+the bottom `Working` text, `Waiting for background...` status text, or the Codex
+spinner in the window title when the terminal hides the bottom status. When work
+clears, it types `continue` and submits it in the same window. It is built for
+the visible session you are already using, not for hidden backend resume or
+archived transcript replay.
 
 ![Codex Continuum watcher console](docs/assets/continuum-watching.png)
 
