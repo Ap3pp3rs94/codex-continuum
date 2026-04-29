@@ -144,10 +144,10 @@ approval selector does not send a choice, Continuum fails closed: it writes a
 `continue` into the prompt. This also protects prompt menus when approval
 selection is disabled.
 
-When Codex puts the terminal title in a `Select ...` state but the actual
-approval menu text is not visible to UI Automation, Continuum does not guess.
-It writes `codex_live_continue.interactive_prompt_blocked` and waits for the
-operator or for readable approval text.
+When the terminal title enters a `Select ...` state, Continuum treats that as
+Windows console selection mode, clears it with Escape, and writes a
+`codex_live_continue.selection_mode_cleared` receipt. Approval menus are blocked
+only when readable prompt text shows an actual command or numbered prompt.
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" start -TargetProcessId <pid> -SessionId "<session-id>" -AutoSelectApprovalChoice

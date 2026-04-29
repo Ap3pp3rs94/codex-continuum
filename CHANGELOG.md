@@ -28,6 +28,11 @@
   the following command?".
 - Added a fail-closed interactive prompt block so Continuum will not type
   `continue` into an unhandled numbered/approval menu.
+- Changed text `Working` detection to a line-anchored, case-sensitive match so
+  transcript text such as `working copy` cannot hold the watcher in a false
+  working state.
+- Added explicit console selection-mode clearing with
+  `codex_live_continue.selection_mode_cleared` receipts.
 
 ## 0.2.1
 

@@ -85,12 +85,14 @@ before sending the choice. Each send writes a
 `codex_live_continue.approval_choice` receipt with `choice_reason` and
 `scan_scope`.
 
-The same idle scan has a fail-closed path. If the visible window looks like an
-interactive Codex prompt, or the title enters a `Select ...` state, and no
-approval choice is sent, the watcher writes
+The same idle scan has a fail-closed path. If the visible window text looks like
+an interactive Codex prompt and no approval choice is sent, the watcher writes
 `codex_live_continue.interactive_prompt_blocked` and skips the normal
-`continue` branch for that poll. This keeps unrecognized menus from receiving
-free-form continuation text.
+`continue` branch for that poll. A `Select ...` title by itself is handled as
+Windows console selection mode: the watcher clears it with Escape and writes
+`codex_live_continue.selection_mode_cleared` before scanning again. This keeps
+unrecognized menus from receiving free-form continuation text without freezing
+on console selection mode.
 
 Status treats a prompt block as active only while the target is idle and no
 newer attach, prompt, approval choice, or stop receipt has superseded it. That
@@ -126,6 +128,9 @@ bottom-status matching and rely on the Codex spinner in the PowerShell title.
 Pair it with `-RequireObservedWorkingBeforeFirstPrompt` when restarting around
 an existing prompt, so Continuum waits for a fresh work cycle before sending the
 first `continue`.
+
+The default text status pattern is line-anchored and case-sensitive so transcript
+output such as `working copy` does not count as Codex's live `Working` status.
 
 ## Startup Intake
 

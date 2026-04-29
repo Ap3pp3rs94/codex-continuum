@@ -53,9 +53,10 @@ A protected run should either write `codex_live_continue.approval_choice` or
 `prompts_sent`; if it stays `0`, Continuum saw the menu and did not type
 `continue` into it.
 
-If the prompt title starts with `Select` but the numbered menu text is not
-available to UI Automation, current builds block instead of guessing. Look for
-`codex_live_continue.interactive_prompt_blocked`.
+If the title starts with `Select`, current builds treat it as Windows console
+selection mode and clear it with Escape. Look for
+`codex_live_continue.selection_mode_cleared`. Real command or numbered Codex
+menus still write `codex_live_continue.interactive_prompt_blocked`.
 
 Check status:
 

@@ -36,6 +36,10 @@ Describe "Codex Continuum package" {
             "send_confirmation",
             "RequireObservedWorkingBeforeFirstPrompt",
             'observedWorking = -not',
+            '[string]$StatusPattern = "(?m)^\s*Working\s*$"',
+            "-cmatch `$StatusPattern",
+            "Clear-ConsoleSelectionMode",
+            "codex_live_continue.selection_mode_cleared",
             "UsageWarningPattern",
             "UsagePauseFallbackSeconds",
             "Get-UsagePauseState",
@@ -59,6 +63,10 @@ Describe "Codex Continuum package" {
             if ($watcher -notmatch [regex]::Escape($pattern)) {
                 throw "Watcher behavior check failed. Missing pattern '$pattern'."
             }
+        }
+
+        if ($watcher -match '\$titleLooksInteractive') {
+            throw "Watcher still treats a Select title alone as an interactive prompt."
         }
     }
 

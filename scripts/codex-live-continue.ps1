@@ -5,7 +5,7 @@ param(
     [string]$Prompt = "continue",
 
     [ValidateNotNullOrEmpty()]
-    [string]$StatusPattern = "\bWorking\b",
+    [string]$StatusPattern = "(?m)^\s*Working\s*$",
 
     [string]$TitleWorkingPattern = "(^|:\s*)[\u280b\u2819\u2839\u2838\u283c\u2834\u2826\u2827\u2807\u280f]\s+",
 
@@ -530,7 +530,7 @@ function Get-LiveSessionWorkingState {
 
     $status = Get-LiveSessionStatusText -Handle $Handle
     $title = [CodexContinuumWindow]::GetTitle($Handle)
-    $workingByText = ([string]$status.Text) -match $StatusPattern
+    $workingByText = ([string]$status.Text) -cmatch $StatusPattern
     $workingByTitle = (-not [string]::IsNullOrWhiteSpace($TitleWorkingPattern)) -and ($title -match $TitleWorkingPattern)
     $signal = if ($workingByText) {
         "text"
@@ -765,11 +765,10 @@ function Get-InteractivePromptBlock {
     $approvalTailLines = [Math]::Min(50, [Math]::Max($TailLines, 30))
     $scanText = Select-TailText -Text $Text -LineCount $approvalTailLines
     $numberedChoices = [regex]::Matches($scanText, "(?m)^\s*[1-9][\.)]\s+\S")
-    $titleLooksInteractive = (-not [string]::IsNullOrWhiteSpace($Title)) -and ($Title -match "(?i)^Select\b")
     $textLooksInteractive = (-not [string]::IsNullOrWhiteSpace($scanText)) -and ($scanText -match $InteractivePromptBlockPattern)
     $commandPromptText = (-not [string]::IsNullOrWhiteSpace($scanText)) -and ($scanText -match "(?is)(would you like to run|run the following command|yes,\s*proceed|tell codex what to do differently)")
 
-    if (-not ($titleLooksInteractive -or $commandPromptText -or ($textLooksInteractive -and $numberedChoices.Count -ge 2))) {
+    if (-not ($commandPromptText -or ($textLooksInteractive -and $numberedChoices.Count -ge 2))) {
         return [pscustomobject]@{
             Detected = $false
             Context = ""
@@ -785,9 +784,6 @@ function Get-InteractivePromptBlock {
 
     $blockReason = if ($commandPromptText) {
         "command_prompt"
-    }
-    elseif ($titleLooksInteractive) {
-        "select_title"
     }
     else {
         "numbered_prompt"
@@ -946,6 +942,33 @@ function Send-ContinuePrompt {
     }
 
     return "$activationMethod+$textMethod+$($submitMethods -join '+')-unconfirmed"
+}
+
+function Clear-ConsoleSelectionMode {
+    param(
+        [Parameter(Mandatory = $true)]
+        [IntPtr]$Handle
+    )
+
+    $activationMethod = Set-LiveSessionForeground -Handle $Handle
+    if ([CodexContinuumWindow]::GetForegroundWindow() -ne $Handle) {
+        $currentHandle = [CodexContinuumWindow]::GetForegroundWindow()
+        $currentHandleId = ("0x{0:x}" -f $currentHandle.ToInt64())
+        throw "target_window_not_foreground activation=$activationMethod current=$currentHandleId"
+    }
+
+    $escapeMethod = ""
+    try {
+        [CodexContinuumWindow]::SendEscapeKey()
+        $escapeMethod = "sendinput-escape"
+    }
+    catch {
+        [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
+        $escapeMethod = "sendkeys-escape"
+    }
+
+    Start-Sleep -Milliseconds 200
+    return "$activationMethod+$escapeMethod"
 }
 
 function Resolve-LiveSessionHandle {
@@ -1141,6 +1164,38 @@ while ($MaxPrompts -eq 0 -or $sentPrompts -lt $MaxPrompts) {
             session_id = $SessionId
         }
         Write-Host "Resumed watching the attached live session."
+    }
+
+    $currentTitle = [CodexContinuumWindow]::GetTitle($sessionHandle)
+    if ($currentTitle -match "(?i)^Select\b") {
+        $clearMethod = ""
+        $clearError = ""
+        try {
+            $clearMethod = Clear-ConsoleSelectionMode -Handle $sessionHandle
+        }
+        catch {
+            $clearMethod = "selection-clear-failed"
+            $clearError = $_.Exception.Message
+        }
+
+        Write-Receipt -Event "codex_live_continue.selection_mode_cleared" -Data @{
+            handle = $handleId
+            title = $currentTitle
+            clear_method = $clearMethod
+            error = $clearError
+            prompts_sent = $sentPrompts
+            session_id = $SessionId
+        }
+
+        if ([string]::IsNullOrWhiteSpace($clearError)) {
+            Write-Host "Cleared Windows console selection mode for the attached live session."
+        }
+        else {
+            Write-Host "Console selection mode clear failed and will retry: $clearError"
+        }
+
+        Start-Sleep -Milliseconds $PollMilliseconds
+        continue
     }
 
     $status = Get-LiveSessionWorkingState -Handle $sessionHandle

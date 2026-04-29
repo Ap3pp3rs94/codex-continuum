@@ -42,10 +42,14 @@ if ($testText -match "\bShould\b") {
 }
 
 $watcher = Get-Content -LiteralPath (Join-Path $repoRoot "scripts\codex-live-continue.ps1") -Raw
-foreach ($required in @("SubmitConfirmMilliseconds", "StableClearMilliseconds = 5000", "sendkeys-tilde", "sendkeys-ctrl-m", "SendEnterKey", "SendEscapeKey", "-confirmed", "TitleWorkingPattern", "WorkingSignal", "ForceForegroundWindow", "Set-LiveSessionForeground", "prompt_attempts", "MaxFailedSubmitAttempts", "consecutive_failed_submit_attempts", "repeated_failed_submit", "KillFlagPath", "kill_flag", "confirmed_work_observed", "send_confirmation", "RequireObservedWorkingBeforeFirstPrompt", "observedWorking = -not", "UsageWarningPattern", "UsagePauseFallbackSeconds", "Get-UsagePauseState", "codex_live_continue.usage_paused", "codex_live_continue.usage_resumed", "AutoSelectApprovalChoice", "ApprovalPromptPattern", "InteractivePromptBlockPattern", "would you like to run", "DoNotAskAgainApprovalPattern", "DoNotAskAgainApprovalChoice", "FullWindow", "full_window_tail", "not_scanned_working", "Get-ApprovalPromptMatch", "Get-InteractivePromptBlock", "Send-ApprovalChoice", "codex_live_continue.approval_choice", "codex_live_continue.interactive_prompt_blocked")) {
+foreach ($required in @("SubmitConfirmMilliseconds", "StableClearMilliseconds = 5000", "sendkeys-tilde", "sendkeys-ctrl-m", "SendEnterKey", "SendEscapeKey", "-confirmed", "TitleWorkingPattern", "WorkingSignal", "ForceForegroundWindow", "Set-LiveSessionForeground", "prompt_attempts", "MaxFailedSubmitAttempts", "consecutive_failed_submit_attempts", "repeated_failed_submit", "KillFlagPath", "kill_flag", "confirmed_work_observed", "send_confirmation", "RequireObservedWorkingBeforeFirstPrompt", "observedWorking = -not", '[string]$StatusPattern = "(?m)^\s*Working\s*$', "-cmatch `$StatusPattern", "Clear-ConsoleSelectionMode", "codex_live_continue.selection_mode_cleared", "UsageWarningPattern", "UsagePauseFallbackSeconds", "Get-UsagePauseState", "codex_live_continue.usage_paused", "codex_live_continue.usage_resumed", "AutoSelectApprovalChoice", "ApprovalPromptPattern", "InteractivePromptBlockPattern", "would you like to run", "DoNotAskAgainApprovalPattern", "DoNotAskAgainApprovalChoice", "FullWindow", "full_window_tail", "not_scanned_working", "Get-ApprovalPromptMatch", "Get-InteractivePromptBlock", "Send-ApprovalChoice", "codex_live_continue.approval_choice", "codex_live_continue.interactive_prompt_blocked")) {
     if ($watcher -notmatch [regex]::Escape($required)) {
         Add-Failure "Watcher missing required submit behavior: $required"
     }
+}
+
+if ($watcher -match '\$titleLooksInteractive') {
+    Add-Failure "Watcher still treats a Select title alone as an interactive prompt."
 }
 
 $launcher = Get-Content -LiteralPath (Join-Path $repoRoot "scripts\start-codex-continuum.ps1") -Raw
