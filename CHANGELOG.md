@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.2
+
 - Added a README safety model, stop/pause condition summary, background
   autonomy boundary, and watcher screenshot asset.
 - Added `-MaxFailedSubmitAttempts` and `-KillFlagPath` so repeated submit

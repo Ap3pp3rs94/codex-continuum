@@ -174,7 +174,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plu
 From the latest GitHub release:
 
 ```powershell
-$version = "0.2.1"
+$version = "0.2.2"
 $zip = Join-Path $env:TEMP "codex-continuum-plugin-v$version.zip"
 Invoke-WebRequest -Uri "https://github.com/Ap3pp3rs94/codex-continuum/releases/download/v$version/codex-continuum-plugin-v$version.zip" -OutFile $zip
 Expand-Archive -Path $zip -DestinationPath "$env:USERPROFILE\.codex\plugins" -Force
