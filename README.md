@@ -54,6 +54,8 @@ Default kill flag:
   blocks one focus handoff.
 - Pauses instead of continuing if Codex shows a usage-limit or rate-limit reset
   warning, then resumes after the reset time it can parse.
+- Resyncs the live window when the same working snapshot stays unchanged past
+  `-StuckWorkingSeconds`, and records the resync in receipts.
 - Can opt in to selecting choice `1` on numbered Codex approval prompts, or
   choice `2` when the prompt says not to ask again, with an approval-choice
   receipt for audit. Approval detection scans the visible full-window tail only
@@ -129,6 +131,8 @@ Stop or pause behavior:
   detected; sends pause until the parsed reset time or fallback pause expires.
 - `interactive_prompt_blocked`: visible approval/menu prompt was detected but
   not safely selected; sends pause until the prompt clears.
+- `resynced`: attached working snapshot looked stuck and Continuum refreshed
+  the target handle before deciding whether it was still working.
 - `window_closed`: attached live window no longer exists; watcher stops.
 - `focus_lost`: watcher stops only when `-ExitOnFocusLoss` is set.
 - `repeated_failed_submit`: failed or unconfirmed submits reached
@@ -148,6 +152,13 @@ repository text that only mentions quota does not pause the watcher. If the
 warning does not include a time, the default pause is one hour. Override with
 `-UsagePauseFallbackSeconds`, or disable the guard with
 `-DisableUsageLimitPause`.
+
+If the same working snapshot does not change for 30 minutes, Continuum writes a
+`resynced` receipt and re-resolves the target from the configured PID or window
+handle. If the stale signal is only bottom `Working` text and the title is no
+longer actively working, Continuum treats that stale text as idle, then still
+runs the full-window approval/prompt guard before sending `continue`. Tune with
+`-StuckWorkingSeconds`; set it to `0` to disable automatic stuck-working resync.
 
 Auto-select approval prompts only when you intentionally want Continuum to pick
 choice `1` on numbered Codex approval menus, or choice `2` when the prompt says
@@ -174,7 +185,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plu
 From the latest GitHub release:
 
 ```powershell
-$version = "0.2.2"
+$version = "0.2.3"
 $zip = Join-Path $env:TEMP "codex-continuum-plugin-v$version.zip"
 Invoke-WebRequest -Uri "https://github.com/Ap3pp3rs94/codex-continuum/releases/download/v$version/codex-continuum-plugin-v$version.zip" -OutFile $zip
 Expand-Archive -Path $zip -DestinationPath "$env:USERPROFILE\.codex\plugins" -Force

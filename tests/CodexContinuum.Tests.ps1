@@ -30,6 +30,13 @@ Describe "Codex Continuum package" {
             "MaxFailedSubmitAttempts",
             "consecutive_failed_submit_attempts",
             "repeated_failed_submit",
+            "StuckWorkingSeconds",
+            "ResyncCooldownSeconds",
+            "Get-StatusSnapshotHash",
+            "Sync-LiveSessionHandle",
+            "staleWorkingIgnoreHash",
+            "stale_text_resync",
+            "codex_live_continue.resynced",
             "KillFlagPath",
             "kill_flag",
             "confirmed_work_observed",
@@ -140,6 +147,8 @@ Describe "Codex Continuum package" {
             "Session/thread id",
             "NonInteractive",
             "MaxFailedSubmitAttempts",
+            "StuckWorkingSeconds",
+            "ResyncCooldownSeconds",
             "KillFlagPath",
             "AutoSelectApprovalChoice",
             "ApprovalChoice",
@@ -265,6 +274,10 @@ Describe "Codex Continuum package" {
             if ($summary.LastInteractivePromptBlock.Active -ne $false) {
                 throw "Status kept an interactive prompt block active after a newer attach."
             }
+
+            if ($null -eq $summary.LastResync) {
+                throw "Status did not include the resync summary."
+            }
         }
         finally {
             Remove-Item -LiteralPath $receipt -Force -ErrorAction SilentlyContinue
@@ -348,6 +361,58 @@ Describe "Codex Continuum package" {
             $summary = ($json | Out-String) | ConvertFrom-Json
             if ($summary.UsagePause.Active -ne $false) {
                 throw "Status kept a usage pause active after a newer attach."
+            }
+        }
+        finally {
+            Remove-Item -LiteralPath $receipt -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It "reports resync receipts" {
+        $statusScript = Join-Path $repoRoot "scripts\get-continuum-status.ps1"
+        $receipt = Join-Path ([System.IO.Path]::GetTempPath()) "codex-continuum-resync-test-$PID.jsonl"
+        $now = [DateTimeOffset]::Now
+        @(
+            ([ordered]@{
+                ts = $now.AddSeconds(-20).ToString("o")
+                event = "codex_live_continue.attached"
+                target_process_id = 0
+                session_id = "resync-test-session"
+                handle = "0x1"
+                title_working_pattern = "(^|:\s*)[\u280b]\s+"
+            } | ConvertTo-Json -Compress),
+            ([ordered]@{
+                ts = $now.AddSeconds(-10).ToString("o")
+                event = "codex_live_continue.resynced"
+                handle = "0x2"
+                old_handle = "0x1"
+                changed_handle = $true
+                reason = "stuck_working"
+                method = "target_process_id"
+                error = ""
+                unchanged_seconds = 1800
+                working_signal_before = "text"
+                working_signal_after = "stale_text_resync"
+                forced_idle = $true
+                resync_count = 1
+                prompts_sent = 0
+                session_id = "resync-test-session"
+            } | ConvertTo-Json -Compress)
+        ) | Set-Content -LiteralPath $receipt -Encoding UTF8
+
+        try {
+            $json = & $statusScript -ReceiptPath $receipt -Json
+            $summary = ($json | Out-String) | ConvertFrom-Json
+            if ($summary.LastResync.Reason -ne "stuck_working") {
+                throw "Status did not report resync reason."
+            }
+
+            if ($summary.LastResync.ForcedIdle -ne $true) {
+                throw "Status did not report forced-idle resync."
+            }
+
+            if ($summary.LastResync.UnchangedSeconds -ne 1800) {
+                throw "Status did not report unchanged resync seconds."
             }
         }
         finally {

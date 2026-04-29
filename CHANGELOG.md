@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.2.3
+
+- Added stuck-working resync detection with `codex_live_continue.resynced`
+  receipts, `LastResync` status output, and tunable `-StuckWorkingSeconds` /
+  `-ResyncCooldownSeconds` thresholds.
+
 ## 0.2.2
 
 - Added a README safety model, stop/pause condition summary, background

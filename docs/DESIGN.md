@@ -20,8 +20,10 @@ Codex Continuum is a live-window watcher.
 7. Bring the same target window foreground with a Win32 activation retry path.
 8. Clear console selection mode with Escape, then type `continue`.
 9. Submit and confirm the status returns to active work by text or title signal.
-10. Stop after repeated failed or unconfirmed submit attempts.
-11. Write a receipt.
+10. If an active working snapshot stops changing past the configured threshold,
+    resync the target handle before treating stale text as idle.
+11. Stop after repeated failed or unconfirmed submit attempts.
+12. Write a receipt.
 
 ## Why UI Automation
 
@@ -121,6 +123,12 @@ Pauses:
   safely selectable.
 - `focus_lost` with `-PauseWhenTargetNotForeground`: focus left the target and
   the run was configured to pause rather than continue in the background.
+
+Resyncs:
+
+- `resynced`: the same working snapshot stayed unchanged for
+  `-StuckWorkingSeconds`; the watcher refreshed the target handle from the
+  configured PID/window id and recorded whether stale text was treated as idle.
 
 ## Guarded Title-Signal Runs
 

@@ -94,6 +94,24 @@ quota should not pause the watcher. It resumes automatically after `Until`.
 If the warning text is visible only outside the bottom terminal region, restart
 with `-AllowFullWindowFallback` so Continuum can inspect the full window.
 
+## It Looks Locked Up
+
+Run:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" status -Json
+```
+
+Check `LastResync`. A recent `Reason` of `stuck_working` means Continuum saw the
+same working snapshot for at least `-StuckWorkingSeconds` and refreshed the
+target attachment. If `ForcedIdle` is `true`, the stale signal was only bottom
+status text, the title was no longer actively working, and Continuum let the
+normal stable-idle and interactive prompt guards decide whether to send
+`continue`.
+
+Raise `-StuckWorkingSeconds` for very long quiet tasks. Set it to `0` to disable
+automatic stuck-working resync.
+
 ## Update Refuses To Run
 
 The updater refuses to overwrite a git checkout. In a cloned repo, use:

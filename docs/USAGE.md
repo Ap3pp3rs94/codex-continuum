@@ -53,6 +53,32 @@ Continuum stops after three failed or unconfirmed submit attempts by default:
 
 Set `-MaxFailedSubmitAttempts 0` only when you want to disable that stop guard.
 
+## Stuck-Working Resync
+
+Continuum tracks a fingerprint of the visible working snapshot: title, working
+signal, visible text, accessible element count, and fallback mode. If that
+fingerprint does not change for 30 minutes while the session still appears to be
+working, Continuum writes a `codex_live_continue.resynced` receipt and refreshes
+the attached handle from the configured target PID or window handle.
+
+Default threshold:
+
+```powershell
+-StuckWorkingSeconds 1800
+```
+
+Default resync cooldown:
+
+```powershell
+-ResyncCooldownSeconds 300
+```
+
+Set `-StuckWorkingSeconds 0` to disable stuck-working resync. If the stuck
+signal is only bottom `Working` or `Waiting for background...` text and the
+window title is no longer actively working, Continuum treats the stale text as
+idle long enough for the normal stable-idle and full-window interactive prompt
+guards to run. It does not bypass approval blocking.
+
 ## Guarded Approval-Safe Run
 
 This is the recommended form when you want Continuum to handle Codex numbered
@@ -107,6 +133,8 @@ Continuum distinguishes stop conditions from temporary pauses:
 - Visible interactive prompts write
   `codex_live_continue.interactive_prompt_blocked` and block `continue` until
   the prompt clears or a safe approval choice is sent.
+- Stuck working snapshots write `codex_live_continue.resynced` and refresh the
+  live target attachment before any stale text is treated as idle.
 - Closed target windows stop the watcher with `window_closed`.
 - `-ExitOnFocusLoss` stops the watcher with `focus_lost`; without that flag,
   focus loss is not a hard stop.
@@ -184,7 +212,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plu
 
 The status report is read-only. It summarizes receipts, watcher processes, the
 target process, last working signal, last prompt, last approval choice, prompt
-counts, interactive prompt blocks, usage pauses, and stale idle conditions.
+counts, interactive prompt blocks, usage pauses, resyncs, and stale idle
+conditions.
 
 ## Stop
 
@@ -211,7 +240,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plu
 Update to a specific release:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" update -Version 0.2.1
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" update -Version 0.2.3
 ```
 
 If you are inside a git checkout, use `git pull` instead. The updater refuses
@@ -243,7 +272,7 @@ If Codex changes the background-wait wording, override `-BackgroundWaitPattern`.
 Download the release zip into the Codex plugin folder:
 
 ```powershell
-$version = "0.2.1"
+$version = "0.2.3"
 $zip = Join-Path $env:TEMP "codex-continuum-plugin-v$version.zip"
 Invoke-WebRequest -Uri "https://github.com/Ap3pp3rs94/codex-continuum/releases/download/v$version/codex-continuum-plugin-v$version.zip" -OutFile $zip
 Expand-Archive -Path $zip -DestinationPath "$env:USERPROFILE\.codex\plugins" -Force

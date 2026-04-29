@@ -176,6 +176,7 @@ function Get-ContinuumSummary {
     $lastStopped = Select-LastReceiptEvent -Events $eventArray -Name "codex_live_continue.stopped"
     $lastUsagePaused = Select-LastReceiptEvent -Events $eventArray -Name "codex_live_continue.usage_paused"
     $lastUsageResumed = Select-LastReceiptEvent -Events $eventArray -Name "codex_live_continue.usage_resumed"
+    $lastResynced = Select-LastReceiptEvent -Events $eventArray -Name "codex_live_continue.resynced"
 
     $lastEventTime = Convert-ReceiptTime -Event $lastEvent
     $lastAttachedTime = Convert-ReceiptTime -Event $lastAttached
@@ -186,6 +187,7 @@ function Get-ContinuumSummary {
     $lastStoppedTime = Convert-ReceiptTime -Event $lastStopped
     $lastUsagePausedTime = Convert-ReceiptTime -Event $lastUsagePaused
     $lastUsageResumedTime = Convert-ReceiptTime -Event $lastUsageResumed
+    $lastResyncedTime = Convert-ReceiptTime -Event $lastResynced
     $usagePauseUntil = Convert-ReceiptFieldTime -Event $lastUsagePaused -Name "pause_until"
 
     $targetProcessId = [int](Get-PropertyValue -Object $lastAttached -Name "target_process_id" -Default 0)
@@ -404,6 +406,17 @@ function Get-ContinuumSummary {
             Reason = [string](Get-PropertyValue -Object $lastUsagePaused -Name "reason" -Default "")
             FallbackUsed = Convert-ToBoolean (Get-PropertyValue -Object $lastUsagePaused -Name "fallback_used" -Default $false)
             MatchedText = [string](Get-PropertyValue -Object $lastUsagePaused -Name "matched_text" -Default "")
+        }
+        LastResync = [pscustomobject]@{
+            At = if ($null -eq $lastResyncedTime) { $null } else { $lastResyncedTime.ToString("o") }
+            AgeSeconds = Get-AgeSeconds -Time $lastResyncedTime
+            Reason = [string](Get-PropertyValue -Object $lastResynced -Name "reason" -Default "")
+            Method = [string](Get-PropertyValue -Object $lastResynced -Name "method" -Default "")
+            ChangedHandle = Convert-ToBoolean (Get-PropertyValue -Object $lastResynced -Name "changed_handle" -Default $false)
+            ForcedIdle = Convert-ToBoolean (Get-PropertyValue -Object $lastResynced -Name "forced_idle" -Default $false)
+            UnchangedSeconds = [int](Get-PropertyValue -Object $lastResynced -Name "unchanged_seconds" -Default 0)
+            ResyncCount = [int](Get-PropertyValue -Object $lastResynced -Name "resync_count" -Default 0)
+            Error = [string](Get-PropertyValue -Object $lastResynced -Name "error" -Default "")
         }
         LastStopped = [pscustomobject]@{
             At = if ($null -eq $lastStoppedTime) { $null } else { $lastStoppedTime.ToString("o") }

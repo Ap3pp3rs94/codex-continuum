@@ -63,6 +63,12 @@ param(
     [ValidateRange(0, 100)]
     [int]$MaxFailedSubmitAttempts = 3,
 
+    [ValidateRange(0, 86400)]
+    [int]$StuckWorkingSeconds = 1800,
+
+    [ValidateRange(0, 86400)]
+    [int]$ResyncCooldownSeconds = 300,
+
     [ValidateRange(0, 60)]
     [int]$AttachDelaySeconds = 0,
 
@@ -381,6 +387,8 @@ $watcherParameters = @{
     CooldownSeconds = $CooldownSeconds
     MaxPrompts = $MaxPrompts
     MaxFailedSubmitAttempts = $MaxFailedSubmitAttempts
+    StuckWorkingSeconds = $StuckWorkingSeconds
+    ResyncCooldownSeconds = $ResyncCooldownSeconds
     AttachDelaySeconds = $AttachDelaySeconds
     TimeoutSeconds = $TimeoutSeconds
 }

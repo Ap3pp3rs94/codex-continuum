@@ -50,6 +50,12 @@ param(
     [ValidateRange(0, 100)]
     [int]$MaxFailedSubmitAttempts = 3,
 
+    [ValidateRange(0, 86400)]
+    [int]$StuckWorkingSeconds = 1800,
+
+    [ValidateRange(0, 86400)]
+    [int]$ResyncCooldownSeconds = 300,
+
     [ValidateRange(0, 60)]
     [int]$AttachDelaySeconds = 5,
 
@@ -559,6 +565,70 @@ function Get-LiveSessionWorkingState {
     }
 }
 
+function Get-StatusSnapshotHash {
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Status
+    )
+
+    $raw = @(
+        [string]$Status.Title,
+        [string]$Status.WorkingSignal,
+        [string]$Status.IncludedCount,
+        [string]$Status.UsedFallback,
+        [string]$Status.Text
+    ) -join "`n---codex-continuum-status---`n"
+
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($raw)
+        $hashBytes = $sha.ComputeHash($bytes)
+        return (($hashBytes | ForEach-Object { $_.ToString("x2") }) -join "")
+    }
+    finally {
+        $sha.Dispose()
+    }
+}
+
+function Sync-LiveSessionHandle {
+    param(
+        [Parameter(Mandatory = $true)]
+        [IntPtr]$CurrentHandle
+    )
+
+    $method = "current_handle"
+    $newHandle = $CurrentHandle
+
+    if ($TargetWindowHandle -gt 0) {
+        $candidate = [IntPtr]::new([long]$TargetWindowHandle)
+        if (-not [CodexContinuumWindow]::IsWindow($candidate)) {
+            throw "TargetWindowHandle is no longer a live window: $TargetWindowHandle"
+        }
+
+        $newHandle = $candidate
+        $method = "target_window_handle"
+    }
+    elseif ($TargetProcessId -gt 0) {
+        $targetProcess = Get-Process -Id $TargetProcessId -ErrorAction Stop
+        if ($targetProcess.MainWindowHandle -eq 0) {
+            throw "TargetProcessId $TargetProcessId has no main window handle."
+        }
+
+        $newHandle = [IntPtr]$targetProcess.MainWindowHandle
+        $method = "target_process_id"
+    }
+    elseif (-not [CodexContinuumWindow]::IsWindow($newHandle)) {
+        throw "Current session window is no longer live and no explicit target was provided."
+    }
+
+    return [pscustomobject]@{
+        Handle = $newHandle
+        Method = $method
+        Title = [CodexContinuumWindow]::GetTitle($newHandle)
+        Changed = ($newHandle -ne $CurrentHandle)
+    }
+}
+
 function Select-UsageWarningContext {
     param(
         [string]$Text
@@ -1057,6 +1127,8 @@ Write-Receipt -Event "codex_live_continue.attached" -Data @{
     submit_confirm_ms = $SubmitConfirmMilliseconds
     cooldown_s = $CooldownSeconds
     max_failed_submit_attempts = $MaxFailedSubmitAttempts
+    stuck_working_s = $StuckWorkingSeconds
+    resync_cooldown_s = $ResyncCooldownSeconds
     attach_delay_s = $AttachDelaySeconds
     target_process_id = $TargetProcessId
     target_window_handle = $TargetWindowHandle
@@ -1126,6 +1198,11 @@ $approvalChoiceAttempts = 0
 $lastInteractivePromptBlockAt = (Get-Date).AddSeconds(-11)
 $interactivePromptBlocks = 0
 $lastObservedState = $null
+$lastWorkingSnapshotHash = ""
+$workingSnapshotSince = $null
+$staleWorkingIgnoreHash = ""
+$lastStuckResyncAt = (Get-Date).AddSeconds(-1 * ($ResyncCooldownSeconds + 1))
+$stuckResyncCount = 0
 $focusPaused = $false
 $usagePausedUntil = $null
 $usagePauseReason = ""
@@ -1235,6 +1312,107 @@ while ($MaxPrompts -eq 0 -or $sentPrompts -lt $MaxPrompts) {
 
     $status = Get-LiveSessionWorkingState -Handle $sessionHandle
     $isWorking = [bool]$status.Working
+    $effectiveWorkingSignal = [string]$status.WorkingSignal
+    $statusSnapshotHash = Get-StatusSnapshotHash -Status $status
+    $staleWorkingForcedIdle = $false
+    $stuckWorkingSeconds = $null
+
+    if ($isWorking) {
+        $nowForStuckCheck = Get-Date
+        if ($statusSnapshotHash -ne $lastWorkingSnapshotHash) {
+            $lastWorkingSnapshotHash = $statusSnapshotHash
+            $workingSnapshotSince = $nowForStuckCheck
+        }
+        elseif ($null -eq $workingSnapshotSince) {
+            $workingSnapshotSince = $nowForStuckCheck
+        }
+
+        $stuckWorkingSeconds = [int][Math]::Floor(($nowForStuckCheck - $workingSnapshotSince).TotalSeconds)
+        $resyncCooldownClear = (($nowForStuckCheck - $lastStuckResyncAt).TotalSeconds -ge $ResyncCooldownSeconds)
+        if ($StuckWorkingSeconds -gt 0 -and $stuckWorkingSeconds -ge $StuckWorkingSeconds -and $resyncCooldownClear) {
+            $oldHandleId = $handleId
+            $oldTitle = [string]$status.Title
+            $oldSignal = [string]$status.WorkingSignal
+            $oldSnapshotHash = $statusSnapshotHash
+            $resyncMethod = ""
+            $resyncError = ""
+
+            try {
+                $sync = Sync-LiveSessionHandle -CurrentHandle $sessionHandle
+                $sessionHandle = [IntPtr]$sync.Handle
+                $handleId = ("0x{0:x}" -f $sessionHandle.ToInt64())
+                $windowTitle = [string]$sync.Title
+                $resyncMethod = [string]$sync.Method
+                $status = Get-LiveSessionWorkingState -Handle $sessionHandle
+                $isWorking = [bool]$status.Working
+                $effectiveWorkingSignal = [string]$status.WorkingSignal
+                $statusSnapshotHash = Get-StatusSnapshotHash -Status $status
+            }
+            catch {
+                $resyncMethod = "resync_failed"
+                $resyncError = $_.Exception.Message
+            }
+
+            $lastStuckResyncAt = Get-Date
+            $stuckResyncCount += 1
+            $titleStillWorking = (-not [string]::IsNullOrWhiteSpace($TitleWorkingPattern)) -and ([string]$status.Title -match $TitleWorkingPattern)
+            if ([string]::IsNullOrWhiteSpace($resyncError) -and $isWorking -and $statusSnapshotHash -eq $oldSnapshotHash -and ([string]$status.WorkingSignal -in @("text", "background_wait")) -and -not $titleStillWorking) {
+                $isWorking = $false
+                $effectiveWorkingSignal = "stale_text_resync"
+                $staleWorkingForcedIdle = $true
+                $staleWorkingIgnoreHash = $statusSnapshotHash
+            }
+
+            Write-Receipt -Event "codex_live_continue.resynced" -Data @{
+                handle = $handleId
+                old_handle = $oldHandleId
+                changed_handle = ($handleId -ne $oldHandleId)
+                reason = "stuck_working"
+                method = $resyncMethod
+                error = $resyncError
+                unchanged_seconds = $stuckWorkingSeconds
+                working_signal_before = $oldSignal
+                working_signal_after = $effectiveWorkingSignal
+                title_before = $oldTitle
+                title_after = [string]$status.Title
+                snapshot_hash = $oldSnapshotHash
+                forced_idle = [bool]$staleWorkingForcedIdle
+                resync_count = $stuckResyncCount
+                prompts_sent = $sentPrompts
+                session_id = $SessionId
+            }
+
+            if ($staleWorkingForcedIdle) {
+                Write-Host "Resynced after $stuckWorkingSeconds second(s) of unchanged Working text; treating stale text as idle unless an interactive prompt is visible."
+            }
+            elseif ([string]::IsNullOrWhiteSpace($resyncError)) {
+                Write-Host "Resynced attached live session after $stuckWorkingSeconds second(s) of unchanged Working state."
+            }
+            else {
+                Write-Host "Working-state resync failed and will retry after cooldown: $resyncError"
+            }
+
+            $lastWorkingSnapshotHash = $statusSnapshotHash
+            $workingSnapshotSince = Get-Date
+        }
+    }
+    else {
+        $lastWorkingSnapshotHash = ""
+        $workingSnapshotSince = $null
+    }
+
+    if ($isWorking -and -not [string]::IsNullOrWhiteSpace($staleWorkingIgnoreHash)) {
+        $titleWorkingNow = (-not [string]::IsNullOrWhiteSpace($TitleWorkingPattern)) -and ([string]$status.Title -match $TitleWorkingPattern)
+        if ($statusSnapshotHash -eq $staleWorkingIgnoreHash -and ([string]$status.WorkingSignal -in @("text", "background_wait")) -and -not $titleWorkingNow) {
+            $isWorking = $false
+            $effectiveWorkingSignal = "stale_text_resync"
+            $staleWorkingForcedIdle = $true
+        }
+        else {
+            $staleWorkingIgnoreHash = ""
+        }
+    }
+
     $approvalPrompt = [pscustomobject]@{
         Detected = $false
         Context = ""
@@ -1266,10 +1444,11 @@ while ($MaxPrompts -eq 0 -or $sentPrompts -lt $MaxPrompts) {
         Write-Receipt -Event "codex_live_continue.status" -Data @{
             handle = $handleId
             working = [bool]$isWorking
-            working_signal = [string]$status.WorkingSignal
+            working_signal = $effectiveWorkingSignal
             title = [string]$status.Title
             included_accessible_elements = [int]$status.IncludedCount
             used_full_window_fallback = [bool]$status.UsedFallback
+            stale_working_forced_idle = [bool]$staleWorkingForcedIdle
             session_id = $SessionId
         }
     }
@@ -1477,6 +1656,10 @@ while ($MaxPrompts -eq 0 -or $sentPrompts -lt $MaxPrompts) {
                 confirmed_work_observed = [bool]$confirmedWorkObserved
                 consecutive_failed_submit_attempts = $consecutiveFailedSubmitAttempts
             }
+
+            $staleWorkingIgnoreHash = ""
+            $lastWorkingSnapshotHash = ""
+            $workingSnapshotSince = $null
 
             if ($sent) {
                 $limitLabel = if ($MaxPrompts -eq 0) { "unlimited" } else { [string]$MaxPrompts }
