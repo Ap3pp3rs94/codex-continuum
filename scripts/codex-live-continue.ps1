@@ -155,6 +155,15 @@ public static class CodexContinuumWindow
     [DllImport("kernel32.dll")]
     public static extern uint GetCurrentThreadId();
 
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr GetStdHandle(int nStdHandle);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetConsoleMode(IntPtr hConsoleHandle, out uint lpMode);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool SetConsoleMode(IntPtr hConsoleHandle, uint dwMode);
+
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
 
@@ -171,6 +180,9 @@ public static class CodexContinuumWindow
     private const ushort VK_MENU = 0x12;
     private const ushort VK_ESCAPE = 0x1B;
     private const ushort VK_RETURN = 0x0D;
+    private const int STD_INPUT_HANDLE = -10;
+    private const uint ENABLE_QUICK_EDIT_MODE = 0x0040;
+    private const uint ENABLE_EXTENDED_FLAGS = 0x0080;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct INPUT
@@ -201,6 +213,42 @@ public static class CodexContinuumWindow
         StringBuilder title = new StringBuilder(512);
         GetWindowText(hWnd, title, title.Capacity);
         return title.ToString();
+    }
+
+    public static bool DisableQuickEditMode(out uint originalMode, out uint newMode, out int errorCode)
+    {
+        originalMode = 0;
+        newMode = 0;
+        errorCode = 0;
+
+        IntPtr stdin = GetStdHandle(STD_INPUT_HANDLE);
+        if (stdin == IntPtr.Zero || stdin == new IntPtr(-1))
+        {
+            errorCode = Marshal.GetLastWin32Error();
+            return false;
+        }
+
+        uint mode;
+        if (!GetConsoleMode(stdin, out mode))
+        {
+            errorCode = Marshal.GetLastWin32Error();
+            return false;
+        }
+
+        originalMode = mode;
+        newMode = (mode | ENABLE_EXTENDED_FLAGS) & ~ENABLE_QUICK_EDIT_MODE;
+        if (newMode == mode)
+        {
+            return true;
+        }
+
+        if (!SetConsoleMode(stdin, newMode))
+        {
+            errorCode = Marshal.GetLastWin32Error();
+            return false;
+        }
+
+        return true;
     }
 
     public static bool ForceForegroundWindow(IntPtr hWnd)
@@ -357,6 +405,21 @@ function Write-Receipt {
     }
 
     Add-Content -LiteralPath $receiptPath -Value (($payload | ConvertTo-Json -Compress -Depth 6)) -Encoding UTF8
+}
+
+function Disable-WatcherConsoleQuickEdit {
+    $originalMode = [uint32]0
+    $newMode = [uint32]0
+    $errorCode = 0
+    $success = [CodexContinuumWindow]::DisableQuickEditMode([ref]$originalMode, [ref]$newMode, [ref]$errorCode)
+
+    return [pscustomobject]@{
+        Success = [bool]$success
+        OriginalMode = [int64]$originalMode
+        Mode = [int64]$newMode
+        Changed = [bool]($success -and $originalMode -ne $newMode)
+        ErrorCode = [int]$errorCode
+    }
 }
 
 function Get-ElementText {
@@ -1101,6 +1164,22 @@ function Resolve-LiveSessionHandle {
     }
 
     return [CodexContinuumWindow]::GetForegroundWindow()
+}
+
+$watcherConsoleMode = Disable-WatcherConsoleQuickEdit
+Write-Receipt -Event "codex_live_continue.console_mode" -Data @{
+    quick_edit_disabled = [bool]$watcherConsoleMode.Success
+    changed = [bool]$watcherConsoleMode.Changed
+    original_mode = [int64]$watcherConsoleMode.OriginalMode
+    mode = [int64]$watcherConsoleMode.Mode
+    error_code = [int]$watcherConsoleMode.ErrorCode
+    session_id = $SessionId
+}
+if ([bool]$watcherConsoleMode.Success) {
+    Write-Host "Watcher console QuickEdit selection freeze guard is active."
+}
+else {
+    Write-Host "Watcher console QuickEdit guard could not be enabled; error code $($watcherConsoleMode.ErrorCode)."
 }
 
 $sessionHandle = Resolve-LiveSessionHandle

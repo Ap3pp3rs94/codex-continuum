@@ -112,6 +112,12 @@ normal stable-idle and interactive prompt guards decide whether to send
 Raise `-StuckWorkingSeconds` for very long quiet tasks. Set it to `0` to disable
 automatic stuck-working resync.
 
+If `State` is `WatcherConsoleSelection`, the watcher PowerShell itself is in
+Windows console selection mode. Press `Esc` in the watcher window or restart
+Continuum. Current builds disable QuickEdit on startup and write a
+`codex_live_continue.console_mode` receipt so selecting text in the monitor
+window should not freeze the loop.
+
 ## Update Refuses To Run
 
 The updater refuses to overwrite a git checkout. In a cloned repo, use:
@@ -136,7 +142,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plu
 
 If `State` is `IdleStale`, Continuum saw the target idle longer than the stale
 threshold without a confirmed prompt. Check `Action`, `LastPrompt`, and
-`Watcher.ProcessIds` in the report.
+`Watcher.ProcessIds` in the report. If `Watcher.ConsoleSelectionMode` is `true`,
+the visible watcher monitor is selected/frozen; restart with the current build
+or press `Esc` in that window.
 
 Run a probe:
 

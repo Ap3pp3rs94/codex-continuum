@@ -37,6 +37,9 @@ Describe "Codex Continuum package" {
             "staleWorkingIgnoreHash",
             "stale_text_resync",
             "codex_live_continue.resynced",
+            "DisableQuickEditMode",
+            "Disable-WatcherConsoleQuickEdit",
+            "codex_live_continue.console_mode",
             "KillFlagPath",
             "kill_flag",
             "confirmed_work_observed",
@@ -273,6 +276,10 @@ Describe "Codex Continuum package" {
 
             if ($summary.LastInteractivePromptBlock.Active -ne $false) {
                 throw "Status kept an interactive prompt block active after a newer attach."
+            }
+
+            if ($null -eq $summary.Watcher.ConsoleSelectionMode) {
+                throw "Status did not include watcher console selection mode."
             }
 
             if ($null -eq $summary.LastResync) {

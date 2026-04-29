@@ -56,6 +56,8 @@ Default kill flag:
   warning, then resumes after the reset time it can parse.
 - Resyncs the live window when the same working snapshot stays unchanged past
   `-StuckWorkingSeconds`, and records the resync in receipts.
+- Disables QuickEdit on the watcher console so selecting text in the monitor
+  PowerShell does not freeze the continuation loop.
 - Can opt in to selecting choice `1` on numbered Codex approval prompts, or
   choice `2` when the prompt says not to ask again, with an approval-choice
   receipt for audit. Approval detection scans the visible full-window tail only
@@ -160,6 +162,10 @@ longer actively working, Continuum treats that stale text as idle, then still
 runs the full-window approval/prompt guard before sending `continue`. Tune with
 `-StuckWorkingSeconds`; set it to `0` to disable automatic stuck-working resync.
 
+The watcher also writes a `console_mode` receipt when it starts. Current builds
+disable QuickEdit on the watcher PowerShell window, preventing the monitor
+console from entering `Select ...` mode and freezing the loop after one send.
+
 Auto-select approval prompts only when you intentionally want Continuum to pick
 choice `1` on numbered Codex approval menus, or choice `2` when the prompt says
 not to ask again:
@@ -185,7 +191,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plu
 From the latest GitHub release:
 
 ```powershell
-$version = "0.2.3"
+$version = "0.2.4"
 $zip = Join-Path $env:TEMP "codex-continuum-plugin-v$version.zip"
 Invoke-WebRequest -Uri "https://github.com/Ap3pp3rs94/codex-continuum/releases/download/v$version/codex-continuum-plugin-v$version.zip" -OutFile $zip
 Expand-Archive -Path $zip -DestinationPath "$env:USERPROFILE\.codex\plugins" -Force

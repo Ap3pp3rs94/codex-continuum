@@ -210,6 +210,21 @@ function Get-ContinuumSummary {
     }
 
     $watchers = @(Get-ContinuumWatcherProcess)
+    $watcherDetails = @(
+        $watchers | ForEach-Object {
+            $processId = [int]$_.ProcessId
+            $process = Get-Process -Id $processId -ErrorAction SilentlyContinue
+            $title = if ($null -eq $process) { "" } else { [string]$process.MainWindowTitle }
+            [pscustomobject]@{
+                ProcessId = $processId
+                Name = [string]$_.Name
+                MainWindowTitle = $title
+                ConsoleSelectionMode = ($title -match "(?i)^Select\b")
+                Responding = if ($null -eq $process) { $null } else { [bool]$process.Responding }
+            }
+        }
+    )
+    $watcherConsoleSelectionActive = @($watcherDetails | Where-Object { [bool]$_.ConsoleSelectionMode }).Count -gt 0
     $lastStatusWorking = Convert-ToBoolean (Get-PropertyValue -Object $lastStatus -Name "working" -Default $false)
     $liveTitleKnown = ($null -ne $targetProcess -and -not [string]::IsNullOrWhiteSpace($targetTitle))
     $currentWorking = $liveWorkingByTitle -or ((-not $liveTitleKnown) -and $lastStatusWorking)
@@ -295,6 +310,11 @@ function Get-ContinuumSummary {
         $health = "Attention"
         $action = "Restart Continuum against a live Codex window."
     }
+    elseif ($watcherConsoleSelectionActive) {
+        $state = "WatcherConsoleSelection"
+        $health = "Attention"
+        $action = "Watcher PowerShell is in console selection mode. Press Esc in that watcher window or restart Continuum with the current build."
+    }
     elseif ($usagePauseActive) {
         $state = "UsagePaused"
         $health = "Paused"
@@ -343,6 +363,8 @@ function Get-ContinuumSummary {
             Running = [bool]($watchers.Count -gt 0)
             ProcessIds = @($watchers | ForEach-Object { [int]$_.ProcessId })
             Count = [int]$watchers.Count
+            ConsoleSelectionMode = [bool]$watcherConsoleSelectionActive
+            Details = @($watcherDetails)
         }
         Target = [pscustomobject]@{
             ProcessId = $targetProcessId

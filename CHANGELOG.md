@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.2.4
+
+- Disabled watcher-console QuickEdit selection mode at startup, added
+  `codex_live_continue.console_mode` receipts, and surfaced
+  `WatcherConsoleSelection` status for monitor windows stuck in `Select ...`.
+
 ## 0.2.3
 
 - Added stuck-working resync detection with `codex_live_continue.resynced`

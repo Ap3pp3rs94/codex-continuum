@@ -79,6 +79,14 @@ window title is no longer actively working, Continuum treats the stale text as
 idle long enough for the normal stable-idle and full-window interactive prompt
 guards to run. It does not bypass approval blocking.
 
+## Watcher Console Freeze Guard
+
+Continuum disables QuickEdit mode on the watcher PowerShell console at startup.
+That prevents accidental text selection in the visible monitor window from
+putting the watcher into `Select ...` mode and suspending the continuation loop.
+Startup writes a `codex_live_continue.console_mode` receipt with the original
+console mode, the applied mode, and any Win32 error code.
+
 ## Guarded Approval-Safe Run
 
 This is the recommended form when you want Continuum to handle Codex numbered
@@ -240,7 +248,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plu
 Update to a specific release:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" update -Version 0.2.3
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" update -Version 0.2.4
 ```
 
 If you are inside a git checkout, use `git pull` instead. The updater refuses
@@ -272,7 +280,7 @@ If Codex changes the background-wait wording, override `-BackgroundWaitPattern`.
 Download the release zip into the Codex plugin folder:
 
 ```powershell
-$version = "0.2.3"
+$version = "0.2.4"
 $zip = Join-Path $env:TEMP "codex-continuum-plugin-v$version.zip"
 Invoke-WebRequest -Uri "https://github.com/Ap3pp3rs94/codex-continuum/releases/download/v$version/codex-continuum-plugin-v$version.zip" -OutFile $zip
 Expand-Archive -Path $zip -DestinationPath "$env:USERPROFILE\.codex\plugins" -Force
