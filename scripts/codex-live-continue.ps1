@@ -56,6 +56,18 @@ param(
     [ValidateRange(0, 86400)]
     [int]$ResyncCooldownSeconds = 300,
 
+    [ValidateRange(0, 604800)]
+    [int]$TargetResumeGraceSeconds = 0,
+
+    [ValidateRange(1, 3600)]
+    [int]$TargetResumePollSeconds = 10,
+
+    [ValidateRange(0, 3600)]
+    [int]$SuspendGapSeconds = 60,
+
+    [ValidateRange(0, 3600)]
+    [int]$PostResumeSettleSeconds = 60,
+
     [ValidateRange(0, 60)]
     [int]$AttachDelaySeconds = 5,
 
@@ -692,6 +704,203 @@ function Sync-LiveSessionHandle {
     }
 }
 
+function Get-ProcessTreeByParent {
+    $rows = Get-CimInstance Win32_Process |
+        Select-Object ProcessId, ParentProcessId, Name, CommandLine
+
+    $children = @{}
+    foreach ($row in $rows) {
+        $parentId = [int]$row.ParentProcessId
+        if (-not $children.ContainsKey($parentId)) {
+            $children[$parentId] = New-Object System.Collections.ArrayList
+        }
+
+        [void]$children[$parentId].Add($row)
+    }
+
+    return @{
+        Rows = $rows
+        Children = $children
+    }
+}
+
+function Test-HasCodexDescendant {
+    param(
+        [Parameter(Mandatory = $true)]
+        [int]$ProcessId,
+
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Children
+    )
+
+    $queue = New-Object System.Collections.Queue
+    $queue.Enqueue($ProcessId)
+
+    while ($queue.Count -gt 0) {
+        $current = [int]$queue.Dequeue()
+        if (-not $Children.ContainsKey($current)) {
+            continue
+        }
+
+        foreach ($child in $Children[$current]) {
+            $name = [string]$child.Name
+            $commandLine = [string]$child.CommandLine
+            if (
+                ($name -ieq "node.exe" -and $commandLine -match "@openai[\\/]+codex[\\/]+bin[\\/]+codex\.js") -or
+                ($name -ieq "codex.exe" -and $commandLine -match "@openai[\\/]+codex")
+            ) {
+                return $true
+            }
+
+            $queue.Enqueue([int]$child.ProcessId)
+        }
+    }
+
+    return $false
+}
+
+function Normalize-LiveWindowTitleForResume {
+    param(
+        [string]$Title
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Title)) {
+        return ""
+    }
+
+    $normalized = $Title.Trim()
+    $normalized = $normalized -replace "(?i)^Administrator:\s*", ""
+    $normalized = $normalized -replace "(?i)^Select\s+", ""
+    $normalized = $normalized -replace "^[\u280b\u2819\u2839\u2838\u283c\u2834\u2826\u2827\u2807\u280f]\s+", ""
+    $normalized = $normalized -replace "^\s*[:\-]+\s*", ""
+    return $normalized.Trim()
+}
+
+function Get-LiveCodexWindowCandidateForResume {
+    param(
+        [string]$ResumeTitleKey
+    )
+
+    $tree = Get-ProcessTreeByParent
+    $candidates = New-Object System.Collections.ArrayList
+
+    foreach ($row in $tree.Rows) {
+        $name = [string]$row.Name
+        if ($name -notin @("pwsh.exe", "powershell.exe", "WindowsTerminal.exe")) {
+            continue
+        }
+
+        if (-not (Test-HasCodexDescendant -ProcessId ([int]$row.ProcessId) -Children $tree.Children)) {
+            continue
+        }
+
+        $process = Get-Process -Id ([int]$row.ProcessId) -ErrorAction SilentlyContinue
+        if ($null -eq $process -or $process.MainWindowHandle -eq 0) {
+            continue
+        }
+
+        $title = [string]$process.MainWindowTitle
+        if ($WindowTitlePattern -and $title -notmatch $WindowTitlePattern) {
+            continue
+        }
+
+        $titleKey = Normalize-LiveWindowTitleForResume -Title $title
+        if (-not [string]::IsNullOrWhiteSpace($ResumeTitleKey) -and $titleKey -ne $ResumeTitleKey) {
+            continue
+        }
+
+        [void]$candidates.Add([pscustomobject]@{
+            ProcessId = [int]$process.Id
+            ProcessName = [string]$process.ProcessName
+            Title = $title
+            TitleKey = $titleKey
+            Handle = [IntPtr]$process.MainWindowHandle
+            HandleId = ("0x{0:x}" -f ([int64]$process.MainWindowHandle))
+        })
+    }
+
+    return @($candidates | Sort-Object ProcessId)
+}
+
+function Resolve-ResumedLiveSessionHandle {
+    param(
+        [Parameter(Mandatory = $true)]
+        [IntPtr]$CurrentHandle,
+
+        [string]$ResumeTitleKey
+    )
+
+    if ([CodexContinuumWindow]::IsWindow($CurrentHandle)) {
+        return [pscustomobject]@{
+            Found = $true
+            Handle = $CurrentHandle
+            Method = "current_handle"
+            Title = [CodexContinuumWindow]::GetTitle($CurrentHandle)
+            ProcessId = 0
+            CandidateCount = 1
+            Error = ""
+        }
+    }
+
+    if ($TargetWindowHandle -gt 0) {
+        $candidateHandle = [IntPtr]::new([long]$TargetWindowHandle)
+        if ([CodexContinuumWindow]::IsWindow($candidateHandle)) {
+            return [pscustomobject]@{
+                Found = $true
+                Handle = $candidateHandle
+                Method = "target_window_handle"
+                Title = [CodexContinuumWindow]::GetTitle($candidateHandle)
+                ProcessId = 0
+                CandidateCount = 1
+                Error = ""
+            }
+        }
+    }
+
+    if ($TargetProcessId -gt 0) {
+        $targetProcess = Get-Process -Id $TargetProcessId -ErrorAction SilentlyContinue
+        if ($null -ne $targetProcess -and $targetProcess.MainWindowHandle -ne 0) {
+            $candidateHandle = [IntPtr]$targetProcess.MainWindowHandle
+            if ([CodexContinuumWindow]::IsWindow($candidateHandle)) {
+                return [pscustomobject]@{
+                    Found = $true
+                    Handle = $candidateHandle
+                    Method = "target_process_id"
+                    Title = [string]$targetProcess.MainWindowTitle
+                    ProcessId = [int]$targetProcess.Id
+                    CandidateCount = 1
+                    Error = ""
+                }
+            }
+        }
+    }
+
+    $candidates = @(Get-LiveCodexWindowCandidateForResume -ResumeTitleKey $ResumeTitleKey)
+    if ($candidates.Count -eq 1) {
+        $candidate = $candidates[0]
+        return [pscustomobject]@{
+            Found = $true
+            Handle = [IntPtr]$candidate.Handle
+            Method = "resume_candidate"
+            Title = [string]$candidate.Title
+            ProcessId = [int]$candidate.ProcessId
+            CandidateCount = 1
+            Error = ""
+        }
+    }
+
+    $errorText = if ($candidates.Count -gt 1) { "multiple_resume_candidates" } else { "no_resume_candidate" }
+    return [pscustomobject]@{
+        Found = $false
+        Handle = [IntPtr]::Zero
+        Method = "resume_scan"
+        Title = ""
+        ProcessId = 0
+        CandidateCount = [int]$candidates.Count
+        Error = $errorText
+    }
+}
+
 function Select-UsageWarningContext {
     param(
         [string]$Text
@@ -1193,6 +1402,7 @@ if ($WindowTitlePattern -and $windowTitle -notmatch $WindowTitlePattern) {
 }
 
 $handleId = ("0x{0:x}" -f $sessionHandle.ToInt64())
+$resumeTitleKey = Normalize-LiveWindowTitleForResume -Title $windowTitle
 Write-Host "Attached to live window $handleId ($windowTitle)"
 Write-Host "Watching for status pattern '$StatusPattern' or title pattern '$TitleWorkingPattern' in that same live window."
 Write-Host "Receipts: $receiptPath"
@@ -1200,6 +1410,7 @@ Write-Host "Receipts: $receiptPath"
 Write-Receipt -Event "codex_live_continue.attached" -Data @{
     handle = $handleId
     title = $windowTitle
+    resume_title_key = $resumeTitleKey
     max_prompts = $MaxPrompts
     poll_ms = $PollMilliseconds
     stable_clear_ms = $StableClearMilliseconds
@@ -1208,6 +1419,10 @@ Write-Receipt -Event "codex_live_continue.attached" -Data @{
     max_failed_submit_attempts = $MaxFailedSubmitAttempts
     stuck_working_s = $StuckWorkingSeconds
     resync_cooldown_s = $ResyncCooldownSeconds
+    target_resume_grace_s = $TargetResumeGraceSeconds
+    target_resume_poll_s = $TargetResumePollSeconds
+    suspend_gap_s = $SuspendGapSeconds
+    post_resume_settle_s = $PostResumeSettleSeconds
     attach_delay_s = $AttachDelaySeconds
     target_process_id = $TargetProcessId
     target_window_handle = $TargetWindowHandle
@@ -1283,6 +1498,11 @@ $staleWorkingIgnoreHash = ""
 $lastStuckResyncAt = (Get-Date).AddSeconds(-1 * ($ResyncCooldownSeconds + 1))
 $stuckResyncCount = 0
 $focusPaused = $false
+$targetMissingSince = $null
+$targetMissingPauseWritten = $false
+$resumeSettleUntil = $null
+$resumeSettleReason = ""
+$lastLoopAt = Get-Date
 $usagePausedUntil = $null
 $usagePauseReason = ""
 $usagePauseMatchedText = ""
@@ -1303,10 +1523,128 @@ while ($MaxPrompts -eq 0 -or $sentPrompts -lt $MaxPrompts) {
         break
     }
 
+    $loopNow = Get-Date
+    $loopGapSeconds = [int][Math]::Floor(($loopNow - $lastLoopAt).TotalSeconds)
+    $lastLoopAt = $loopNow
+    if ($SuspendGapSeconds -gt 0 -and $loopGapSeconds -ge $SuspendGapSeconds) {
+        $resumeSettleUntil = (Get-Date).AddSeconds($PostResumeSettleSeconds)
+        $resumeSettleReason = "suspend_gap"
+        $clearSince = $null
+        $lastObservedState = $null
+        $lastWorkingSnapshotHash = ""
+        $workingSnapshotSince = $null
+        $staleWorkingIgnoreHash = ""
+        $focusPaused = $false
+        $lastPromptAt = Get-Date
+
+        Write-Receipt -Event "codex_live_continue.suspend_gap_paused" -Data @{
+            handle = $handleId
+            gap_seconds = $loopGapSeconds
+            suspend_gap_s = $SuspendGapSeconds
+            settle_until = $resumeSettleUntil.ToString("o")
+            post_resume_settle_s = $PostResumeSettleSeconds
+            prompts_sent = $sentPrompts
+            session_id = $SessionId
+        }
+        Write-Host "Detected a $loopGapSeconds second watcher gap, likely system sleep or travel. Pausing until $($resumeSettleUntil.ToString("o")) before sending prompts."
+    }
+
     if (-not [CodexContinuumWindow]::IsWindow($sessionHandle)) {
-        $stopReason = "window_closed"
-        Write-Host "Stopped because the attached live window closed. Prompts sent: $sentPrompts"
-        break
+        if ($null -eq $targetMissingSince) {
+            $targetMissingSince = Get-Date
+            $targetMissingPauseWritten = $false
+        }
+
+        $missingSeconds = [int][Math]::Max(0, [Math]::Floor(((Get-Date) - $targetMissingSince).TotalSeconds))
+        $resume = Resolve-ResumedLiveSessionHandle -CurrentHandle $sessionHandle -ResumeTitleKey $resumeTitleKey
+        if ([bool]$resume.Found) {
+            $oldHandleId = $handleId
+            $oldTitle = $windowTitle
+            $sessionHandle = [IntPtr]$resume.Handle
+            $handleId = ("0x{0:x}" -f $sessionHandle.ToInt64())
+            $windowTitle = [string]$resume.Title
+            $resumeTitleKey = Normalize-LiveWindowTitleForResume -Title $windowTitle
+            if ([int]$resume.ProcessId -gt 0) {
+                $TargetProcessId = [int]$resume.ProcessId
+            }
+
+            $targetMissingSince = $null
+            $targetMissingPauseWritten = $false
+            $resumeSettleUntil = (Get-Date).AddSeconds($PostResumeSettleSeconds)
+            $resumeSettleReason = "target_resumed"
+            $observedWorking = -not [bool]$RequireObservedWorkingBeforeFirstPrompt
+            $clearSince = $null
+            $lastPromptAt = Get-Date
+            $consecutiveFailedSubmitAttempts = 0
+            $lastObservedState = $null
+            $lastWorkingSnapshotHash = ""
+            $workingSnapshotSince = $null
+            $staleWorkingIgnoreHash = ""
+            $focusPaused = $false
+
+            Write-Receipt -Event "codex_live_continue.target_resumed" -Data @{
+                handle = $handleId
+                old_handle = $oldHandleId
+                old_title = $oldTitle
+                title = $windowTitle
+                resume_title_key = $resumeTitleKey
+                method = [string]$resume.Method
+                target_process_id = $TargetProcessId
+                missing_seconds = $missingSeconds
+                settle_until = $resumeSettleUntil.ToString("o")
+                post_resume_settle_s = $PostResumeSettleSeconds
+                prompts_sent = $sentPrompts
+                session_id = $SessionId
+            }
+            Write-Host "Resumed attached live session at $handleId ($windowTitle). Letting Codex settle until $($resumeSettleUntil.ToString("o"))."
+        }
+        else {
+            if (-not $targetMissingPauseWritten) {
+                $targetMissingPauseWritten = $true
+                Write-Receipt -Event "codex_live_continue.target_missing_paused" -Data @{
+                    handle = $handleId
+                    title = $windowTitle
+                    resume_title_key = $resumeTitleKey
+                    target_process_id = $TargetProcessId
+                    target_window_handle = $TargetWindowHandle
+                    target_resume_grace_s = $TargetResumeGraceSeconds
+                    target_resume_grace_unlimited = ($TargetResumeGraceSeconds -eq 0)
+                    target_resume_poll_s = $TargetResumePollSeconds
+                    candidate_count = [int]$resume.CandidateCount
+                    reason = [string]$resume.Error
+                    prompts_sent = $sentPrompts
+                    session_id = $SessionId
+                }
+                Write-Host "Paused Continuum because the attached Codex window is missing. Waiting for the live session to resume naturally; press Ctrl+C to stop."
+            }
+
+            if ($TargetResumeGraceSeconds -gt 0 -and $missingSeconds -ge $TargetResumeGraceSeconds) {
+                $stopReason = "target_resume_timeout"
+                Write-Host "Stopped after waiting $missingSeconds second(s) for the attached Codex window to resume. Prompts sent: $sentPrompts"
+                break
+            }
+
+            Start-Sleep -Seconds $TargetResumePollSeconds
+            continue
+        }
+    }
+
+    if ($null -ne $resumeSettleUntil) {
+        if ((Get-Date) -lt $resumeSettleUntil) {
+            Start-Sleep -Milliseconds $PollMilliseconds
+            continue
+        }
+
+        Write-Receipt -Event "codex_live_continue.resume_settle_complete" -Data @{
+            handle = $handleId
+            reason = $resumeSettleReason
+            settle_until = $resumeSettleUntil.ToString("o")
+            prompts_sent = $sentPrompts
+            session_id = $SessionId
+        }
+        Write-Host "Resume settle window complete. Continuum is watching again."
+        $resumeSettleUntil = $null
+        $resumeSettleReason = ""
     }
 
     $foreground = [CodexContinuumWindow]::GetForegroundWindow()

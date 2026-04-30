@@ -29,9 +29,12 @@ The default safety posture is fail-closed:
   retries.
 - Block on unrecognized interactive prompts instead of typing `continue` into a
   numbered menu.
+- Pause when the selected Codex window disappears during laptop sleep or travel,
+  then reattach only when the resumed live window can be identified.
 - Stop after repeated failed or unconfirmed submit attempts.
-- Stop when the attached window closes, the timeout/max-prompt limit is reached,
-  Ctrl+C is pressed, or the kill-flag file appears.
+- Stop when the timeout/max-prompt limit is reached, Ctrl+C is pressed, the
+  kill-flag file appears, or target resume exceeds a configured finite grace
+  window.
 
 Default kill flag:
 
@@ -56,6 +59,9 @@ Default kill flag:
   warning, then resumes after the reset time it can parse.
 - Resyncs the live window when the same working snapshot stays unchanged past
   `-StuckWorkingSeconds`, and records the resync in receipts.
+- Detects system sleep/wake gaps, pauses for a settle window, and waits for a
+  missing Codex target to resume naturally instead of treating travel as a hard
+  failure.
 - Disables QuickEdit on the watcher console so selecting text in the monitor
   PowerShell does not freeze the continuation loop.
 - Can opt in to selecting choice `1` on numbered Codex approval prompts, or
@@ -135,7 +141,11 @@ Stop or pause behavior:
   not safely selected; sends pause until the prompt clears.
 - `resynced`: attached working snapshot looked stuck and Continuum refreshed
   the target handle before deciding whether it was still working.
-- `window_closed`: attached live window no longer exists; watcher stops.
+- `suspend_gap_paused`: watcher loop saw a system sleep/wake gap; sends pause
+  until the post-resume settle window expires.
+- `target_missing_paused`: attached live window disappeared; sends pause while
+  Continuum waits for the visible Codex session to resume. The default
+  `-TargetResumeGraceSeconds 0` waits indefinitely until Ctrl+C or kill flag.
 - `focus_lost`: watcher stops only when `-ExitOnFocusLoss` is set.
 - `repeated_failed_submit`: failed or unconfirmed submits reached
   `-MaxFailedSubmitAttempts`.
@@ -166,6 +176,13 @@ The watcher also writes a `console_mode` receipt when it starts. Current builds
 disable QuickEdit on the watcher PowerShell window, preventing the monitor
 console from entering `Select ...` mode and freezing the loop after one send.
 
+Laptop sleep or travel is handled as a pause path. If the watcher loop wakes
+after a large time gap, it writes `suspend_gap_paused` and waits
+`-PostResumeSettleSeconds` before typing. If the attached window vanished, it
+writes `target_missing_paused`, polls every `-TargetResumePollSeconds`, and
+reattaches only to the resumed live Codex window that matches the original
+target title or configured title pattern.
+
 Auto-select approval prompts only when you intentionally want Continuum to pick
 choice `1` on numbered Codex approval menus, or choice `2` when the prompt says
 not to ask again:
@@ -191,7 +208,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plu
 From the latest GitHub release:
 
 ```powershell
-$version = "0.2.4"
+$version = "0.2.5"
 $zip = Join-Path $env:TEMP "codex-continuum-plugin-v$version.zip"
 Invoke-WebRequest -Uri "https://github.com/Ap3pp3rs94/codex-continuum/releases/download/v$version/codex-continuum-plugin-v$version.zip" -OutFile $zip
 Expand-Archive -Path $zip -DestinationPath "$env:USERPROFILE\.codex\plugins" -Force
@@ -241,6 +258,9 @@ Important receipt events:
 - `codex_live_continue.interactive_prompt_blocked`
 - `codex_live_continue.usage_paused`
 - `codex_live_continue.usage_resumed`
+- `codex_live_continue.suspend_gap_paused`
+- `codex_live_continue.target_missing_paused`
+- `codex_live_continue.target_resumed`
 - `codex_live_continue.stop_requested`
 
 ## Boundaries

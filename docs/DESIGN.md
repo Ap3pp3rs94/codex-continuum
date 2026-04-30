@@ -22,8 +22,12 @@ Codex Continuum is a live-window watcher.
 9. Submit and confirm the status returns to active work by text or title signal.
 10. If an active working snapshot stops changing past the configured threshold,
     resync the target handle before treating stale text as idle.
-11. Stop after repeated failed or unconfirmed submit attempts.
-12. Write a receipt.
+11. If the watcher loop detects a system sleep/wake gap, pause through a
+    post-resume settle window before evaluating the target.
+12. If the attached target disappears, pause and wait for the resumed visible
+    Codex window instead of typing into another window.
+13. Stop after repeated failed or unconfirmed submit attempts.
+14. Write a receipt.
 
 ## Why UI Automation
 
@@ -38,7 +42,9 @@ Codex should do next. It uses the same visible session a human operator selected
 and only sends the configured continuation prompt or bounded approval choice.
 That keeps the trust boundary local and inspectable: when the target window is
 gone, the prompt is ambiguous, the usage limit is active, or submit confirmation
-fails repeatedly, the watcher stops or pauses and writes receipts.
+fails repeatedly, the watcher stops or pauses and writes receipts. A missing
+target after laptop sleep is a pause, not authority to select a different
+session.
 
 ## Submit Fallback
 
@@ -107,7 +113,8 @@ in a paused state after the operator clears the menu or restarts the watcher.
 
 Hard stops:
 
-- `window_closed`: the attached live window no longer exists.
+- `target_resume_timeout`: the attached live window did not resume before a
+  configured finite `-TargetResumeGraceSeconds` window expired.
 - `focus_lost`: focus left the target and `-ExitOnFocusLoss` was set.
 - `repeated_failed_submit`: failed or unconfirmed submits reached the configured
   threshold.
@@ -117,6 +124,11 @@ Hard stops:
 
 Pauses:
 
+- `target_missing_paused`: the attached live window disappeared; the watcher is
+  waiting for the resumed visible Codex session. The default grace value `0`
+  means wait indefinitely until Ctrl+C, stop command, or kill flag.
+- `suspend_gap_paused`: the watcher loop saw a system sleep/wake gap and is
+  waiting through `-PostResumeSettleSeconds` before sending anything.
 - `usage_paused`: an actionable usage-limit, rate-limit, or reset warning was
   detected.
 - `interactive_prompt_blocked`: a visible prompt looked interactive but was not

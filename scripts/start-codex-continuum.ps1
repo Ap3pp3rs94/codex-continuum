@@ -69,6 +69,18 @@ param(
     [ValidateRange(0, 86400)]
     [int]$ResyncCooldownSeconds = 300,
 
+    [ValidateRange(0, 604800)]
+    [int]$TargetResumeGraceSeconds = 0,
+
+    [ValidateRange(1, 3600)]
+    [int]$TargetResumePollSeconds = 10,
+
+    [ValidateRange(0, 3600)]
+    [int]$SuspendGapSeconds = 60,
+
+    [ValidateRange(0, 3600)]
+    [int]$PostResumeSettleSeconds = 60,
+
     [ValidateRange(0, 60)]
     [int]$AttachDelaySeconds = 0,
 
@@ -389,6 +401,10 @@ $watcherParameters = @{
     MaxFailedSubmitAttempts = $MaxFailedSubmitAttempts
     StuckWorkingSeconds = $StuckWorkingSeconds
     ResyncCooldownSeconds = $ResyncCooldownSeconds
+    TargetResumeGraceSeconds = $TargetResumeGraceSeconds
+    TargetResumePollSeconds = $TargetResumePollSeconds
+    SuspendGapSeconds = $SuspendGapSeconds
+    PostResumeSettleSeconds = $PostResumeSettleSeconds
     AttachDelaySeconds = $AttachDelaySeconds
     TimeoutSeconds = $TimeoutSeconds
 }

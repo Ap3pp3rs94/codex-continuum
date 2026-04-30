@@ -1,6 +1,6 @@
 {
   "name": "codex-continuum",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Universal Windows live-session continuation package for Codex.",
   "author": {
     "name": "Ap3pp",
@@ -24,7 +24,7 @@
   "interface": {
     "displayName": "Codex Continuum",
     "shortDescription": "Continue any live Codex PowerShell project window.",
-    "longDescription": "Codex Continuum binds to a live Codex PowerShell window by project name, process id, or window handle. It watches for Working to clear, then types continue and presses Enter in that same live session. If Codex shows a usage-limit reset warning, it pauses continuation until the reset time.",
+    "longDescription": "Codex Continuum binds to a live Codex PowerShell window by project name, process id, or window handle. It watches for Working to clear, then types continue and presses Enter in that same live session. If Codex shows a usage-limit reset warning or the laptop sleeps, it pauses continuation until the session can safely resume.",
     "developerName": "Ap3pp",
     "category": "Productivity",
     "capabilities": [

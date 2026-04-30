@@ -177,6 +177,10 @@ function Get-ContinuumSummary {
     $lastUsagePaused = Select-LastReceiptEvent -Events $eventArray -Name "codex_live_continue.usage_paused"
     $lastUsageResumed = Select-LastReceiptEvent -Events $eventArray -Name "codex_live_continue.usage_resumed"
     $lastResynced = Select-LastReceiptEvent -Events $eventArray -Name "codex_live_continue.resynced"
+    $lastTargetMissingPaused = Select-LastReceiptEvent -Events $eventArray -Name "codex_live_continue.target_missing_paused"
+    $lastTargetResumed = Select-LastReceiptEvent -Events $eventArray -Name "codex_live_continue.target_resumed"
+    $lastSuspendGapPaused = Select-LastReceiptEvent -Events $eventArray -Name "codex_live_continue.suspend_gap_paused"
+    $lastResumeSettleComplete = Select-LastReceiptEvent -Events $eventArray -Name "codex_live_continue.resume_settle_complete"
 
     $lastEventTime = Convert-ReceiptTime -Event $lastEvent
     $lastAttachedTime = Convert-ReceiptTime -Event $lastAttached
@@ -188,9 +192,18 @@ function Get-ContinuumSummary {
     $lastUsagePausedTime = Convert-ReceiptTime -Event $lastUsagePaused
     $lastUsageResumedTime = Convert-ReceiptTime -Event $lastUsageResumed
     $lastResyncedTime = Convert-ReceiptTime -Event $lastResynced
+    $lastTargetMissingPausedTime = Convert-ReceiptTime -Event $lastTargetMissingPaused
+    $lastTargetResumedTime = Convert-ReceiptTime -Event $lastTargetResumed
+    $lastSuspendGapPausedTime = Convert-ReceiptTime -Event $lastSuspendGapPaused
+    $lastResumeSettleCompleteTime = Convert-ReceiptTime -Event $lastResumeSettleComplete
     $usagePauseUntil = Convert-ReceiptFieldTime -Event $lastUsagePaused -Name "pause_until"
+    $suspendSettleUntil = Convert-ReceiptFieldTime -Event $lastSuspendGapPaused -Name "settle_until"
 
     $targetProcessId = [int](Get-PropertyValue -Object $lastAttached -Name "target_process_id" -Default 0)
+    if ($null -ne $lastTargetResumedTime -and ($null -eq $lastAttachedTime -or $lastTargetResumedTime -gt $lastAttachedTime)) {
+        $targetProcessId = [int](Get-PropertyValue -Object $lastTargetResumed -Name "target_process_id" -Default $targetProcessId)
+    }
+
     $targetProcess = $null
     if ($targetProcessId -gt 0) {
         $targetProcess = Get-Process -Id $targetProcessId -ErrorAction SilentlyContinue
@@ -276,6 +289,38 @@ function Get-ContinuumSummary {
         }
     }
 
+    $targetResumePauseActive = $false
+    if ($null -ne $lastTargetMissingPausedTime) {
+        $targetResumePauseActive = $true
+        if ($null -ne $lastTargetResumedTime -and $lastTargetResumedTime -gt $lastTargetMissingPausedTime) {
+            $targetResumePauseActive = $false
+        }
+
+        if ($null -ne $lastStoppedTime -and $lastStoppedTime -gt $lastTargetMissingPausedTime) {
+            $targetResumePauseActive = $false
+        }
+
+        if ($null -ne $lastAttachedTime -and $lastAttachedTime -gt $lastTargetMissingPausedTime) {
+            $targetResumePauseActive = $false
+        }
+    }
+
+    $suspendSettleActive = $false
+    if ($null -ne $lastSuspendGapPausedTime -and $null -ne $suspendSettleUntil -and $suspendSettleUntil -gt [DateTimeOffset]::Now) {
+        $suspendSettleActive = $true
+        if ($null -ne $lastResumeSettleCompleteTime -and $lastResumeSettleCompleteTime -gt $lastSuspendGapPausedTime) {
+            $suspendSettleActive = $false
+        }
+
+        if ($null -ne $lastStoppedTime -and $lastStoppedTime -gt $lastSuspendGapPausedTime) {
+            $suspendSettleActive = $false
+        }
+
+        if ($null -ne $lastAttachedTime -and $lastAttachedTime -gt $lastSuspendGapPausedTime) {
+            $suspendSettleActive = $false
+        }
+    }
+
     $idleAge = $null
     if ($null -ne $lastStatusTime -and -not $currentWorking) {
         $idleAge = Get-AgeSeconds -Time $lastStatusTime
@@ -304,6 +349,16 @@ function Get-ContinuumSummary {
         $state = "NoWatcherProcess"
         $health = "Attention"
         $action = "Start Continuum."
+    }
+    elseif ($targetResumePauseActive) {
+        $state = "TargetResumePaused"
+        $health = "Paused"
+        $action = "Waiting for the attached Codex window to resume naturally."
+    }
+    elseif ($suspendSettleActive) {
+        $state = "ResumeSettling"
+        $health = "Paused"
+        $action = "Waiting after system sleep or resume before sending prompts."
     }
     elseif ($targetProcessId -gt 0 -and $null -eq $targetProcess) {
         $state = "TargetMissing"
@@ -428,6 +483,29 @@ function Get-ContinuumSummary {
             Reason = [string](Get-PropertyValue -Object $lastUsagePaused -Name "reason" -Default "")
             FallbackUsed = Convert-ToBoolean (Get-PropertyValue -Object $lastUsagePaused -Name "fallback_used" -Default $false)
             MatchedText = [string](Get-PropertyValue -Object $lastUsagePaused -Name "matched_text" -Default "")
+        }
+        TargetResumePause = [pscustomobject]@{
+            Active = [bool]$targetResumePauseActive
+            PausedAt = if ($null -eq $lastTargetMissingPausedTime) { $null } else { $lastTargetMissingPausedTime.ToString("o") }
+            ResumedAt = if ($null -eq $lastTargetResumedTime) { $null } else { $lastTargetResumedTime.ToString("o") }
+            MissingSeconds = if ($targetResumePauseActive) { Get-AgeSeconds -Time $lastTargetMissingPausedTime } else { $null }
+            GraceSeconds = [int](Get-PropertyValue -Object $lastTargetMissingPaused -Name "target_resume_grace_s" -Default 0)
+            GraceUnlimited = Convert-ToBoolean (Get-PropertyValue -Object $lastTargetMissingPaused -Name "target_resume_grace_unlimited" -Default $false)
+            PollSeconds = [int](Get-PropertyValue -Object $lastTargetMissingPaused -Name "target_resume_poll_s" -Default 0)
+            Reason = [string](Get-PropertyValue -Object $lastTargetMissingPaused -Name "reason" -Default "")
+            CandidateCount = [int](Get-PropertyValue -Object $lastTargetMissingPaused -Name "candidate_count" -Default 0)
+            LastKnownTitle = [string](Get-PropertyValue -Object $lastTargetMissingPaused -Name "title" -Default "")
+            ResumeTitleKey = [string](Get-PropertyValue -Object $lastTargetMissingPaused -Name "resume_title_key" -Default "")
+        }
+        LastSuspendGap = [pscustomobject]@{
+            Active = [bool]$suspendSettleActive
+            At = if ($null -eq $lastSuspendGapPausedTime) { $null } else { $lastSuspendGapPausedTime.ToString("o") }
+            AgeSeconds = Get-AgeSeconds -Time $lastSuspendGapPausedTime
+            GapSeconds = [int](Get-PropertyValue -Object $lastSuspendGapPaused -Name "gap_seconds" -Default 0)
+            ThresholdSeconds = [int](Get-PropertyValue -Object $lastSuspendGapPaused -Name "suspend_gap_s" -Default 0)
+            SettleUntil = if ($null -eq $suspendSettleUntil) { $null } else { $suspendSettleUntil.ToString("o") }
+            SettleRemainingSeconds = Get-RemainingSeconds -Time $suspendSettleUntil
+            PostResumeSettleSeconds = [int](Get-PropertyValue -Object $lastSuspendGapPaused -Name "post_resume_settle_s" -Default 0)
         }
         LastResync = [pscustomobject]@{
             At = if ($null -eq $lastResyncedTime) { $null } else { $lastResyncedTime.ToString("o") }

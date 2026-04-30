@@ -94,6 +94,34 @@ quota should not pause the watcher. It resumes automatically after `Until`.
 If the warning text is visible only outside the bottom terminal region, restart
 with `-AllowFullWindowFallback` so Continuum can inspect the full window.
 
+## It Broke After I Closed The Laptop
+
+Use version `0.2.5` or newer. Current builds treat laptop sleep and travel as a
+pause/resume lifecycle.
+
+Check status:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" status -Json
+```
+
+If `State` is `TargetResumePaused`, Continuum is still running and waiting for
+the original visible Codex session to resume. `TargetResumePause` shows the last
+known title, missing time, candidate count, and whether the grace window is
+unlimited. If `State` is `ResumeSettling`, the target is visible again and
+Continuum is waiting through the post-resume settle window before it can type.
+
+The default resume behavior is intentionally long-running:
+
+```powershell
+-TargetResumeGraceSeconds 0 -TargetResumePollSeconds 10 -SuspendGapSeconds 60 -PostResumeSettleSeconds 60
+```
+
+If the target does not come back, reopen or resume the same Codex project window.
+Continuum reattaches only when it can identify one matching visible Codex
+PowerShell window; if multiple windows match, it keeps waiting instead of
+typing into the wrong chat.
+
 ## It Looks Locked Up
 
 Run:

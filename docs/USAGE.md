@@ -87,6 +87,40 @@ putting the watcher into `Select ...` mode and suspending the continuation loop.
 Startup writes a `codex_live_continue.console_mode` receipt with the original
 console mode, the applied mode, and any Win32 error code.
 
+## Laptop Sleep And Target Resume
+
+Continuum treats laptop sleep, travel, and temporary target disappearance as
+temporary pauses. If the watcher loop wakes after a large time gap, it writes a
+`codex_live_continue.suspend_gap_paused` receipt, clears stale observation
+state, and waits before it can type again.
+
+Defaults:
+
+```powershell
+-SuspendGapSeconds 60 -PostResumeSettleSeconds 60
+```
+
+If the attached Codex window no longer exists, Continuum writes
+`codex_live_continue.target_missing_paused` and polls for the resumed live Codex
+window. The default waits indefinitely until Ctrl+C, stop command, or kill flag:
+
+```powershell
+-TargetResumeGraceSeconds 0 -TargetResumePollSeconds 10
+```
+
+Set a finite grace window only when a scripted run should stop after a missing
+target remains gone:
+
+```powershell
+-TargetResumeGraceSeconds 14400
+```
+
+Reattachment is conservative. Continuum first checks the original handle, then
+the configured PID/window handle, then visible Codex PowerShell windows whose
+normalized title matches the original target or configured title pattern. If
+multiple resumed candidates match, it keeps waiting instead of typing into the
+wrong chat.
+
 ## Guarded Approval-Safe Run
 
 This is the recommended form when you want Continuum to handle Codex numbered
@@ -143,7 +177,10 @@ Continuum distinguishes stop conditions from temporary pauses:
   the prompt clears or a safe approval choice is sent.
 - Stuck working snapshots write `codex_live_continue.resynced` and refresh the
   live target attachment before any stale text is treated as idle.
-- Closed target windows stop the watcher with `window_closed`.
+- System sleep/wake gaps write `codex_live_continue.suspend_gap_paused` and
+  pause sends until the post-resume settle window expires.
+- Missing target windows write `codex_live_continue.target_missing_paused` and
+  pause while Continuum waits for the visible Codex session to resume.
 - `-ExitOnFocusLoss` stops the watcher with `focus_lost`; without that flag,
   focus loss is not a hard stop.
 - Repeated failed or unconfirmed submits stop the watcher with
@@ -220,8 +257,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plu
 
 The status report is read-only. It summarizes receipts, watcher processes, the
 target process, last working signal, last prompt, last approval choice, prompt
-counts, interactive prompt blocks, usage pauses, resyncs, and stale idle
-conditions.
+counts, interactive prompt blocks, usage pauses, target-resume pauses,
+suspend-gap settles, resyncs, and stale idle conditions.
 
 ## Stop
 
@@ -248,7 +285,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plu
 Update to a specific release:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" update -Version 0.2.4
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\plugins\codex-continuum\codex-continuum.ps1" update -Version 0.2.5
 ```
 
 If you are inside a git checkout, use `git pull` instead. The updater refuses
@@ -280,7 +317,7 @@ If Codex changes the background-wait wording, override `-BackgroundWaitPattern`.
 Download the release zip into the Codex plugin folder:
 
 ```powershell
-$version = "0.2.4"
+$version = "0.2.5"
 $zip = Join-Path $env:TEMP "codex-continuum-plugin-v$version.zip"
 Invoke-WebRequest -Uri "https://github.com/Ap3pp3rs94/codex-continuum/releases/download/v$version/codex-continuum-plugin-v$version.zip" -OutFile $zip
 Expand-Archive -Path $zip -DestinationPath "$env:USERPROFILE\.codex\plugins" -Force

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.2.5
+
+- Added laptop sleep and travel recovery: system wake gaps now write
+  `codex_live_continue.suspend_gap_paused`, clear stale observation state, and
+  wait through a post-resume settle window before sending prompts.
+- Changed missing target windows from a hard `window_closed` stop into
+  `codex_live_continue.target_missing_paused`, with conservative reattach to a
+  uniquely matching resumed Codex PowerShell window.
+- Added `TargetResumePause` and `LastSuspendGap` status output plus tests for
+  target-resume and suspend-gap receipt handling.
+
 ## 0.2.4
 
 - Disabled watcher-console QuickEdit selection mode at startup, added

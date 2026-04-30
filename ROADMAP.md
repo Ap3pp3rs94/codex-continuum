@@ -13,6 +13,7 @@
 
 - Add first-class `start`, `stop`, `status`, and `update` command wrappers.
 - Add richer receipt exports for confirmed vs unconfirmed submit attempts.
+- Add sleep/travel resume receipts and conservative target reattachment.
 - Add optional Windows Terminal profile/title helpers.
 
 ## 0.3
